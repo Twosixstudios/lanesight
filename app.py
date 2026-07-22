@@ -4,11 +4,11 @@ from streamlit_folium import st_folium
 
 from engine import get_route_and_metrics
 
-# Major US Freight Markets for Dropdown Search
+# Major US Freight Markets
 MAJOR_FREIGHT_HUBS = [
+    "San Bernardino, CA",
     "Ontario, CA",
     "Los Angeles, CA",
-    "San Bernardino, CA",
     "Fresno, CA",
     "Oakland, CA",
     "Phoenix, AZ",
@@ -56,11 +56,11 @@ with col1:
     origin_select = st.selectbox(
         "Origin Location",
         options=MAJOR_FREIGHT_HUBS + ["Custom Location..."],
-        index=0,
+        index=0,  # San Bernardino, CA
     )
     if origin_select == "Custom Location...":
         origin_input = st.text_input(
-            "Enter Custom Origin", value="Ontario, California"
+            "Enter Custom Origin", value="San Bernardino, California"
         )
     else:
         origin_input = origin_select
@@ -69,11 +69,11 @@ with col2:
     dest_select = st.selectbox(
         "Destination Location",
         options=MAJOR_FREIGHT_HUBS + ["Custom Location..."],
-        index=3,  # Defaults to Fresno, CA
+        index=4,  # Oakland, CA
     )
     if dest_select == "Custom Location...":
         dest_input = st.text_input(
-            "Enter Custom Destination", value="Fresno, California"
+            "Enter Custom Destination", value="Oakland, California"
         )
     else:
         dest_input = dest_select
@@ -84,6 +84,7 @@ with col3:
         "Calculate Route", type="primary", use_container_width=True
     )
 
+# Force recalculation when button is clicked or state is uninitialized
 if calculate_btn or ("route_data" not in st.session_state):
     with st.spinner("Fetching route geometry & calculating transit metrics..."):
         st.session_state["route_data"] = get_route_and_metrics(
