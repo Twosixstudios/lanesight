@@ -4,7 +4,40 @@ from streamlit_folium import st_folium
 
 from engine import get_route_and_metrics
 
-# Page setup using fail-safe Streamlit emoji shortcodes
+# Major US Freight Markets for Dropdown Search
+MAJOR_FREIGHT_HUBS = [
+    "Ontario, CA",
+    "Los Angeles, CA",
+    "San Bernardino, CA",
+    "Fresno, CA",
+    "Oakland, CA",
+    "Phoenix, AZ",
+    "Las Vegas, NV",
+    "Salt Lake City, UT",
+    "Seattle, WA",
+    "Portland, OR",
+    "Dallas, TX",
+    "Houston, TX",
+    "San Antonio, TX",
+    "El Paso, TX",
+    "Laredo, TX",
+    "Chicago, IL",
+    "Indianapolis, IN",
+    "Columbus, OH",
+    "Memphis, TN",
+    "Nashville, TN",
+    "Atlanta, GA",
+    "Charlotte, NC",
+    "Jacksonville, FL",
+    "Miami, FL",
+    "Kansas City, MO",
+    "St. Louis, MO",
+    "Minneapolis, MN",
+    "Denver, CO",
+    "Newark, NJ",
+    "Harrisburg, PA",
+]
+
 st.set_page_config(
     page_title="LaneSight | Dispatch & Transit Engine",
     page_icon=":world_map:",
@@ -17,20 +50,40 @@ st.caption(
 )
 st.markdown("---")
 
-# User input controls
 col1, col2, col3 = st.columns([3, 3, 2])
 
 with col1:
-    origin_input = st.text_input("Origin Location", value="Ontario, CA")
+    origin_select = st.selectbox(
+        "Origin Location",
+        options=MAJOR_FREIGHT_HUBS + ["Custom Location..."],
+        index=0,
+    )
+    if origin_select == "Custom Location...":
+        origin_input = st.text_input(
+            "Enter Custom Origin", value="Ontario, California"
+        )
+    else:
+        origin_input = origin_select
+
 with col2:
-    dest_input = st.text_input("Destination Location", value="Fresno, CA")
+    dest_select = st.selectbox(
+        "Destination Location",
+        options=MAJOR_FREIGHT_HUBS + ["Custom Location..."],
+        index=3,  # Defaults to Fresno, CA
+    )
+    if dest_select == "Custom Location...":
+        dest_input = st.text_input(
+            "Enter Custom Destination", value="Fresno, California"
+        )
+    else:
+        dest_input = dest_select
+
 with col3:
     st.write("##")
     calculate_btn = st.button(
         "Calculate Route", type="primary", use_container_width=True
     )
 
-# Session state management for route data
 if calculate_btn or ("route_data" not in st.session_state):
     with st.spinner("Fetching route geometry & calculating transit metrics..."):
         st.session_state["route_data"] = get_route_and_metrics(
@@ -44,7 +97,6 @@ if not data:
         "Could not resolve locations or calculate route. Please verify city names."
     )
 else:
-    # Key Metrics Header
     m1, m2, m3 = st.columns(3)
     m1.metric("Driving Distance", f"{data['distance_miles']} miles")
     m2.metric("Est. Driving Time", f"{data['duration_hours']} hours")
@@ -52,7 +104,6 @@ else:
 
     st.markdown("---")
 
-    # Interactive Dark Mode Map
     orig = data["origin"]
     dest = data["destination"]
 
@@ -65,7 +116,6 @@ else:
         tiles="CartoDB dark_matter",
     )
 
-    # Pickup Pin (Green)
     folium.Marker(
         [orig["lat"], orig["lng"]],
         popup=f"Pickup: {orig['address']}",
@@ -73,7 +123,6 @@ else:
         icon=folium.Icon(color="green", icon="play"),
     ).add_to(m)
 
-    # Dropoff Pin (Red)
     folium.Marker(
         [dest["lat"], dest["lng"]],
         popup=f"Dropoff: {dest['address']}",
@@ -81,7 +130,6 @@ else:
         icon=folium.Icon(color="red", icon="stop"),
     ).add_to(m)
 
-    # Cyan Route Polyline
     folium.PolyLine(
         locations=data["geometry"],
         color="#00D2FF",
@@ -89,5 +137,4 @@ else:
         opacity=0.8,
     ).add_to(m)
 
-    # Render Map Component
     st_folium(m, width="100%", height=500)

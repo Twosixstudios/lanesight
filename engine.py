@@ -2,19 +2,94 @@ import requests
 from geopy.distance import geodesic
 from geopy.geocoders import ArcGIS, Nominatim
 
+# 50 US State Abbreviation Mapping
+STATE_ABBREVS = {
+    "AL": "Alabama",
+    "AK": "Alaska",
+    "AZ": "Arizona",
+    "AR": "Arkansas",
+    "CA": "California",
+    "CO": "Colorado",
+    "CT": "Connecticut",
+    "DE": "Delaware",
+    "FL": "Florida",
+    "GA": "Georgia",
+    "HI": "Hawaii",
+    "ID": "Idaho",
+    "IL": "Illinois",
+    "IN": "Indiana",
+    "IA": "Iowa",
+    "KS": "Kansas",
+    "KY": "Kentucky",
+    "LA": "Louisiana",
+    "ME": "Maine",
+    "MD": "Maryland",
+    "MA": "Massachusetts",
+    "MI": "Michigan",
+    "MN": "Minnesota",
+    "MS": "Mississippi",
+    "MO": "Missouri",
+    "MT": "Montana",
+    "NE": "Nebraska",
+    "NV": "Nevada",
+    "NH": "New Hampshire",
+    "NJ": "New Jersey",
+    "NM": "New Mexico",
+    "NY": "New York",
+    "NC": "North Carolina",
+    "ND": "North Dakota",
+    "OH": "Ohio",
+    "OK": "Oklahoma",
+    "OR": "Oregon",
+    "PA": "Pennsylvania",
+    "RI": "Rhode Island",
+    "SC": "South Carolina",
+    "SD": "South Dakota",
+    "TN": "Tennessee",
+    "TX": "Texas",
+    "UT": "Utah",
+    "VT": "Vermont",
+    "VA": "Virginia",
+    "WA": "Washington",
+    "WV": "West Virginia",
+    "WI": "Wisconsin",
+    "WY": "Wyoming",
+}
+
+
+def normalize_us_location(location_name: str) -> str:
+    """Expands state abbreviations (e.g. 'Ontario, CA' -> 'Ontario, California, USA')
+
+    to prevent Canada/international geocoding mix-ups.
+    """
+    clean = location_name.strip()
+    parts = [p.strip() for p in clean.split(",")]
+
+    if len(parts) >= 2:
+        state_part = parts[1].upper()
+        if state_part in STATE_ABBREVS:
+            parts[1] = STATE_ABBREVS[state_part]
+            if len(parts) == 2:
+                parts.append("USA")
+            return ", ".join(parts)
+
+    if "usa" not in clean.lower() and "united states" not in clean.lower():
+        clean += ", USA"
+
+    return clean
+
 
 def geocode_location(location_name: str):
-    """Converts location string into (lat, lng, address).
+    """Converts location string into (lat, lng, address)."""
+    normalized_query = normalize_us_location(location_name)
+    print(
+        f"[LaneSight Log] Geocoding query: '{normalized_query}' (Raw input: '{location_name}')"
+    )
 
-    Primary: ArcGIS (Zero API key required, 100% cloud & AWS server friendly).
-    Fallback: Nominatim.
-    """
-    print(f"[LaneSight Log] Geocoding location: '{location_name}'...")
-
-    # Strategy 1: ArcGIS (Does not block AWS / Streamlit Cloud IP ranges)
+    # Strategy 1: ArcGIS (Zero API key required, cloud friendly)
     try:
         geo_arcgis = ArcGIS(user_agent="lanesight_twosix_studios_v1")
-        loc = geo_arcgis.geocode(location_name, timeout=10)
+        loc = geo_arcgis.geocode(normalized_query, timeout=10)
         if loc:
             print(
                 f"[LaneSight Log] ArcGIS Success -> {loc.address} ({loc.latitude}, {loc.longitude})"
@@ -26,7 +101,7 @@ def geocode_location(location_name: str):
     # Strategy 2: Nominatim (Fallback)
     try:
         geo_nom = Nominatim(user_agent="lanesight_twosix_studios_v1")
-        loc = geo_nom.geocode(location_name, timeout=10)
+        loc = geo_nom.geocode(normalized_query, timeout=10)
         if loc:
             print(
                 f"[LaneSight Log] Nominatim Success -> {loc.address} ({loc.latitude}, {loc.longitude})"
@@ -35,7 +110,6 @@ def geocode_location(location_name: str):
     except Exception as e:
         print(f"[LaneSight Log] Nominatim geocoding failed: {e}")
 
-    print(f"[LaneSight Log] Could not resolve coordinates for: '{location_name}'")
     return None, None, None
 
 
@@ -47,7 +121,7 @@ def get_route_and_metrics(origin_str: str, destination_str: str):
     if not orig_lat or not dest_lat:
         return None
 
-    # Geodesic baseline fallback (~1.2x road curvature factor)
+    # Geodesic baseline fallback (~1.2x road factor)
     direct_miles = round(
         geodesic((orig_lat, orig_lng), (dest_lat, dest_lng)).miles * 1.2, 1
     )
@@ -77,7 +151,9 @@ def get_route_and_metrics(origin_str: str, destination_str: str):
                     f"[LaneSight Log] OSRM Route Fetched: {direct_miles} miles, {est_hours} hrs"
                 )
     except Exception as e:
-        print(f"[LaneSight Log] OSRM routing failed, using geodesic fallback: {e}")
+        print(
+            f"[LaneSight Log] OSRM routing failed, using geodesic fallback: {e}"
+        )
 
     return {
         "origin": {"lat": orig_lat, "lng": orig_lng, "address": orig_full},
