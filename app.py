@@ -50,47 +50,41 @@ st.caption(
 )
 st.markdown("---")
 
-# Wrap controls in a Form to keep UI inputs & route calculation 100% in sync
-with st.form("route_form"):
-    col1, col2, col3 = st.columns([3, 3, 2])
+col1, col2, col3 = st.columns([3, 3, 2])
 
-    with col1:
-        origin_select = st.selectbox(
-            "Origin Location",
-            options=MAJOR_FREIGHT_HUBS + ["Custom Location..."],
-            index=0,  # San Bernardino, CA
+with col1:
+    origin_select = st.selectbox(
+        "Origin Location",
+        options=MAJOR_FREIGHT_HUBS + ["Custom Location..."],
+        index=0,  # San Bernardino, CA
+    )
+    if origin_select == "Custom Location...":
+        origin_input = st.text_input(
+            "Enter Custom Origin", value="San Bernardino, California"
         )
-        origin_custom = st.text_input(
-            "Custom Origin (if selected above)", value="San Bernardino, CA"
-        )
+    else:
+        origin_input = origin_select
 
-    with col2:
-        dest_select = st.selectbox(
-            "Destination Location",
-            options=MAJOR_FREIGHT_HUBS + ["Custom Location..."],
-            index=5,  # Phoenix, AZ
+with col2:
+    dest_select = st.selectbox(
+        "Destination Location",
+        options=MAJOR_FREIGHT_HUBS + ["Custom Location..."],
+        index=4,  # Oakland, CA
+    )
+    if dest_select == "Custom Location...":
+        dest_input = st.text_input(
+            "Enter Custom Destination", value="Oakland, California"
         )
-        dest_custom = st.text_input(
-            "Custom Destination (if selected above)", value="Phoenix, AZ"
-        )
+    else:
+        dest_input = dest_select
 
-    with col3:
-        st.write("##")
-        calculate_btn = st.form_submit_button(
-            "Calculate Route", type="primary", use_container_width=True
-        )
+with col3:
+    st.write("##")
+    calculate_btn = st.button(
+        "Calculate Route", type="primary", use_container_width=True
+    )
 
-# Resolve final inputs
-origin_input = (
-    origin_custom
-    if origin_select == "Custom Location..."
-    else origin_select
-)
-dest_input = (
-    dest_custom if dest_select == "Custom Location..." else dest_select
-)
-
-# Execute calculation on form submission or initial load
+# Force recalculation when button is clicked or state is uninitialized
 if calculate_btn or ("route_data" not in st.session_state):
     with st.spinner("Fetching route geometry & calculating transit metrics..."):
         st.session_state["route_data"] = get_route_and_metrics(
