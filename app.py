@@ -1,42 +1,16 @@
+import logging
+
 import folium
 import streamlit as st
 from streamlit_folium import st_folium
 
-from engine import get_route_and_metrics
+from lanesight.core.router import Router
+from lanesight.hubs import MAJOR_FREIGHT_HUBS
 
-# Major US Freight Markets
-MAJOR_FREIGHT_HUBS = [
-    "San Bernardino, CA",
-    "Ontario, CA",
-    "Los Angeles, CA",
-    "Fresno, CA",
-    "Oakland, CA",
-    "Phoenix, AZ",
-    "Las Vegas, NV",
-    "Salt Lake City, UT",
-    "Seattle, WA",
-    "Portland, OR",
-    "Dallas, TX",
-    "Houston, TX",
-    "San Antonio, TX",
-    "El Paso, TX",
-    "Laredo, TX",
-    "Chicago, IL",
-    "Indianapolis, IN",
-    "Columbus, OH",
-    "Memphis, TN",
-    "Nashville, TN",
-    "Atlanta, GA",
-    "Charlotte, NC",
-    "Jacksonville, FL",
-    "Miami, FL",
-    "Kansas City, MO",
-    "St. Louis, MO",
-    "Minneapolis, MN",
-    "Denver, CO",
-    "Newark, NJ",
-    "Harrisburg, PA",
-]
+logging.basicConfig(
+    level=logging.INFO,
+    format="[LaneSight] %(levelname)s: %(message)s",
+)
 
 st.set_page_config(
     page_title="LaneSight | Dispatch & Transit Engine",
@@ -84,32 +58,41 @@ with col3:
         "Calculate Route", type="primary", use_container_width=True
     )
 
+
+@st.cache_resource
+def get_router() -> Router:
+    return Router()
+
+
 # Force recalculation when button is clicked or state is uninitialized
-if calculate_btn or ("route_data" not in st.session_state):
+if calculate_btn or ("route_result" not in st.session_state):
     with st.spinner("Fetching route geometry & calculating transit metrics..."):
-        st.session_state["route_data"] = get_route_and_metrics(
-            origin_input, dest_input
-        )
+        try:
+            st.session_state["route_result"] = get_router().route(
+                origin_input, dest_input
+            )
+        except ValueError:
+            st.session_state["route_result"] = None
 
-data = st.session_state.get("route_data")
+result = st.session_state.get("route_result")
 
-if not data:
+if not result:
     st.error(
         "Could not resolve locations or calculate route. Please verify city names."
     )
 else:
     m1, m2, m3 = st.columns(3)
-    m1.metric("Driving Distance", f"{data['distance_miles']} miles")
-    m2.metric("Est. Driving Time", f"{data['duration_hours']} hours")
+    m1.metric("Driving Distance", f"{result.distance_miles} miles")
+    m2.metric("Est. Driving Time", f"{result.duration_hours} hours")
     m3.metric("Dispatch Status", "Route Active")
 
     st.markdown("---")
 
-    orig = data["origin"]
-    dest = data["destination"]
+    orig = result.origin
+    dest = result.destination
 
-    center_lat = (orig["lat"] + dest["lat"]) / 2
-    center_lng = (orig["lng"] + dest["lng"]) / 2
+    center_lat = (orig.lat + dest.lat) / 2
+    center_lng = (orig.lng + dest.lng) / 2
 
     m = folium.Map(
         location=[center_lat, center_lng],
@@ -118,21 +101,21 @@ else:
     )
 
     folium.Marker(
-        [orig["lat"], orig["lng"]],
-        popup=f"Pickup: {orig['address']}",
+        [orig.lat, orig.lng],
+        popup=f"Pickup: {orig.address}",
         tooltip="Origin (Pickup)",
         icon=folium.Icon(color="green", icon="play"),
     ).add_to(m)
 
     folium.Marker(
-        [dest["lat"], dest["lng"]],
-        popup=f"Dropoff: {dest['address']}",
+        [dest.lat, dest.lng],
+        popup=f"Dropoff: {dest.address}",
         tooltip="Destination (Dropoff)",
         icon=folium.Icon(color="red", icon="stop"),
     ).add_to(m)
 
     folium.PolyLine(
-        locations=data["geometry"],
+        locations=result.geometry,
         color="#00D2FF",
         weight=4,
         opacity=0.8,
