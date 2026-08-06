@@ -32,6 +32,15 @@ def make_route(use_gear=False, source=SRC_GEODESIC):
         duration_hours=7.4,
         geometry=[[ORIGIN.lat, ORIGIN.lng], [DEST.lat, DEST.lng]],
         source=source,
+        waypoints=[ORIGIN, DEST],
+        legs=[
+            {
+                "origin": ORIGIN.address,
+                "destination": DEST.address,
+                "distance_miles": 410.5,
+                "duration_hours": 7.4,
+            }
+        ],
     )
 
 
@@ -129,6 +138,159 @@ def test_route_raises_on_unresolvable(monkeypatch):
 
 
 # ---------------------------------------------------------------------- #
+# multi-stop waypoints
+# ---------------------------------------------------------------------- #
+MID = GeoPoint(lat=36.3069, lng=-119.7838, address="Fresno, CA, USA")
+THREE_STOP_URL = (
+    f"{Config().osrm_base_url}/route/v1/driving/"
+    f"{ORIGIN.lng},{ORIGIN.lat};{MID.lng},{MID.lat};{DEST.lng},{DEST.lat}"
+    f"?overview=full&geometries=geojson"
+)
+
+
+def _three_stop_geocode(self, loc):
+    if "San" in loc:
+        return ORIGIN
+    if "Fresno" in loc:
+        return MID
+    return DEST
+
+
+@responses.activate
+def test_route_multi_stop_osrm(monkeypatch):
+    monkeypatch.setattr(Router, "geocode", _three_stop_geocode)
+    payload = {
+        "routes": [
+            {
+                "distance": 763000.0,  # ~474 miles total
+                "duration": 30600.0,  # 8.5 hours total
+                "geometry": {
+                    "coordinates": [
+                        [ORIGIN.lng, ORIGIN.lat],
+                        [-119.7, 36.3],
+                        [MID.lng, MID.lat],
+                        [-121.0, 37.3],
+                        [DEST.lng, DEST.lat],
+                    ]
+                },
+                "legs": [
+                    {"distance": 412800.0, "duration": 16500.0},  # ~256.5 mi
+                    {"distance": 350200.0, "duration": 14100.0},  # ~217.6 mi
+                ],
+            }
+        ]
+    }
+    responses.add(responses.GET, THREE_STOP_URL, json=payload, status=200)
+
+    result = Router().route(
+        "San Bernardino, CA", "Oakland, CA", waypoints=["Fresno, CA"]
+    )
+
+    assert result.distance_miles == 474.1
+    assert result.duration_hours == 8.5
+    assert result.source == SRC_OSRM
+    assert result.origin == ORIGIN
+    assert result.destination == DEST
+    assert result.waypoints == [ORIGIN, MID, DEST]
+    assert len(result.legs) == 2
+    assert result.legs[0] == {
+        "origin": ORIGIN.address,
+        "destination": MID.address,
+        "distance_miles": 256.5,
+        "duration_hours": 4.6,
+    }
+    assert result.legs[1] == {
+        "origin": MID.address,
+        "destination": DEST.address,
+        "distance_miles": 217.6,
+        "duration_hours": 3.9,
+    }
+    assert [DEST.lat, DEST.lng] in result.geometry
+
+
+@responses.activate
+def test_route_multi_stop_geodesic_fallback(monkeypatch):
+    monkeypatch.setattr(Router, "geocode", _three_stop_geocode)
+    responses.add(responses.GET, THREE_STOP_URL, status=500)
+
+    result = Router().route(
+        "San Bernardino, CA", "Oakland, CA", waypoints=["Fresno, CA"]
+    )
+
+    assert result.source == SRC_GEODESIC
+    assert result.waypoints == [ORIGIN, MID, DEST]
+    assert len(result.legs) == 2
+    assert result.geometry == [
+        [ORIGIN.lat, ORIGIN.lng],
+        [MID.lat, MID.lng],
+        [DEST.lat, DEST.lng],
+    ]
+    assert sum(leg["distance_miles"] for leg in result.legs) == pytest.approx(
+        result.distance_miles
+    )
+    assert result.distance_miles > 0
+    assert result.duration_hours > 0
+
+
+def test_route_multi_stop_unresolvable_waypoint(monkeypatch):
+    def flaky_geocode(self, loc):
+        if "Fresno" in loc:
+            return None
+        return ORIGIN
+
+    monkeypatch.setattr(Router, "geocode", flaky_geocode)
+    with pytest.raises(ValueError) as excinfo:
+        Router().route("San Bernardino, CA", "Oakland, CA", waypoints=["Fresno, CA"])
+    assert "Fresno, CA" in str(excinfo.value)
+
+
+def test_route_multi_stop_no_waypoints_single_leg(monkeypatch):
+    monkeypatch.setattr(Router, "geocode", _three_stop_geocode)
+
+    result = Router().route("San Bernardino, CA", "Oakland, CA")
+
+    assert result.waypoints == [ORIGIN, DEST]
+    assert len(result.legs) == 1
+    assert result.legs[0]["origin"] == ORIGIN.address
+    assert result.legs[0]["destination"] == DEST.address
+
+
+# ---------------------------------------------------------------------- #
+# save_route persistence
+# ---------------------------------------------------------------------- #
+def test_save_route_persists(tmp_path, monkeypatch):
+    from sqlmodel import Session, SQLModel, create_engine
+
+    from lanesight import database
+    from lanesight.models import SavedRoute
+
+    engine = create_engine(
+        f"sqlite:///{tmp_path / 'test.db'}",
+        connect_args={"check_same_thread": False},
+    )
+    monkeypatch.setattr(database, "engine", engine)
+    database.init_db()
+
+    router = Router()
+    result = make_route(source=SRC_OSRM)
+    with Session(database.engine) as session:
+        saved = router.save_route(result, session)
+
+    assert saved.id is not None
+    assert saved.origin_address == ORIGIN.address
+    assert saved.destination_address == DEST.address
+    assert saved.distance_miles == 410.5
+    assert saved.duration_hours == 7.4
+    assert saved.polyline_geometry == json.dumps(result.geometry)
+
+    waypoints = json.loads(saved.waypoints_json)
+    assert waypoints == [
+        {"lat": ORIGIN.lat, "lng": ORIGIN.lng, "address": ORIGIN.address},
+        {"lat": DEST.lat, "lng": DEST.lng, "address": DEST.address},
+    ]
+
+
+# ---------------------------------------------------------------------- #
 # JSON contract
 # ---------------------------------------------------------------------- #
 def test_route_result_to_json_contract():
@@ -141,8 +303,12 @@ def test_route_result_to_json_contract():
         "duration_hours",
         "geometry",
         "source",
+        "waypoints",
+        "legs",
     }
     assert set(payload["origin"]) == {"lat", "lng", "address"}
+    assert len(payload["waypoints"]) == 2
+    assert payload["legs"][0]["distance_miles"] == 410.5
 
     reparsed = json.loads(result.to_json())
     assert reparsed == payload

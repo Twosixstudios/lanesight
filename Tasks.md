@@ -17,7 +17,7 @@ kanban-plugin: board
 
 - [ ] **Active Phase**: Phase 1 - Foundation, Cleanup & Data Schema
 - [ ] **Target Deliverable**: Clean repo root, persistent database schema for fleet assets, and saved route logging.
-- [x] **Overall Progress**: 4 / 15 Tasks Completed (26.7%)
+- [x] **Overall Progress**: 5 / 15 Tasks Completed (33.3%)
 
 
 ## 📌 Phase 1: Core Engine & Foundation
@@ -41,7 +41,7 @@ kanban-plugin: board
 
 ## 🚛 Phase 2: Commercial Trucking Engine
 
-- [ ] **Task 2.1: Multi-Stop Waypoint Engine** #priority/high
+- [x] **Task 2.1: Multi-Stop Waypoint Engine** #priority/high
 	- **Description**: Extend `Router.route()` to handle multiple waypoint stops and map polyline rendering.
 	- **Prerequisites**: Task 1.4
 

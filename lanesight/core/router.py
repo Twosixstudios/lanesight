@@ -1,9 +1,10 @@
 """LaneSight routing & geocoding engine.
 
 Provides a standalone :class:`Router` that resolves origin/destination
-locations, fetches an OSRM driving route, and returns a structured
-:class:`RouteResult` serializable to JSON. Intended to be imported by
-other projects (e.g. Fleet Scout) without pulling in the Streamlit UI.
+locations (plus optional intermediate waypoint stops), fetches an OSRM
+driving route, and returns a structured :class:`RouteResult` serializable
+to JSON. Intended to be imported by other projects (e.g. Fleet Scout)
+without pulling in the Streamlit UI.
 """
 
 from __future__ import annotations
@@ -16,6 +17,9 @@ from typing import Optional
 import requests
 from geopy.distance import geodesic
 from geopy.geocoders import ArcGIS, Nominatim
+from sqlmodel import Session
+
+from lanesight.models import SavedRoute
 
 logger = logging.getLogger("lanesight")
 
@@ -109,6 +113,8 @@ class RouteResult:
     duration_hours: float
     geometry: list = field(default_factory=list)  # list of [lat, lng]
     source: str = SRC_GEODESIC  # "osrm" | "geodesic"
+    waypoints: list = field(default_factory=list)  # list[GeoPoint], all ordered stops
+    legs: list = field(default_factory=list)  # list[dict] per-stop breakdown
 
     def to_dict(self) -> dict:
         """Serialize to a plain dict (JSON-friendly)."""
@@ -147,23 +153,58 @@ class Router:
                 return point
         return None
 
-    def route(self, origin_str: str, destination_str: str) -> RouteResult:
-        """Compute distance, transit time, and geometry between two locations.
+    def route(
+        self,
+        origin_str: str,
+        destination_str: str,
+        waypoints: Optional[list[str]] = None,
+    ) -> RouteResult:
+        """Compute a driving route across one or more ordered stops.
 
-        Raises ``ValueError`` if either location cannot be resolved.
+        ``waypoints`` are intermediate stops geocoded between origin and
+        destination. Each stop is resolved to a :class:`GeoPoint`, an OSRM
+        request is built over the full ordered sequence of coordinates, and
+        the response is parsed into total distance/duration plus per-leg
+        breakdowns. Falls back to sequential geodesic estimates if OSRM is
+        unavailable.
+
+        Raises ``ValueError`` if any location cannot be resolved.
         """
-        origin = self.geocode(origin_str)
-        destination = self.geocode(destination_str)
+        stops = [origin_str, *(waypoints or []), destination_str]
+        resolved: list[GeoPoint] = []
+        unresolved: list[str] = []
+        for stop in stops:
+            point = self.geocode(stop)
+            if point is None:
+                unresolved.append(stop)
+            else:
+                resolved.append(point)
 
-        if origin is None or destination is None:
-            unresolved = [
-                name
-                for name, pt in ((origin_str, origin), (destination_str, destination))
-                if pt is None
-            ]
+        if unresolved:
             raise ValueError(f"Could not resolve location(s): {unresolved}")
 
-        return self._route_geopoints(origin, destination)
+        return self._route_geopoints(resolved)
+
+    def save_route(self, result: RouteResult, session: Session) -> SavedRoute:
+        """Persist a computed route into the SQLite database.
+
+        Stores origin/destination addresses, totals, the overview geometry
+        (as JSON), and the full ordered stop list into a :class:`SavedRoute`.
+        """
+        saved = SavedRoute(
+            origin_address=result.origin.address,
+            destination_address=result.destination.address,
+            distance_miles=result.distance_miles,
+            duration_hours=result.duration_hours,
+            polyline_geometry=json.dumps(result.geometry),
+            waypoints_json=json.dumps(
+                [asdict(point) for point in result.waypoints]
+            ),
+        )
+        session.add(saved)
+        session.commit()
+        session.refresh(saved)
+        return saved
 
     # ------------------------------------------------------------------ #
     # Fallback geocoders
@@ -201,29 +242,60 @@ class Router:
     # ------------------------------------------------------------------ #
     # Routing
     # ------------------------------------------------------------------ #
-    def _route_geopoints(self, origin: GeoPoint, destination: GeoPoint) -> RouteResult:
-        direct_miles = round(
-            geodesic((origin.lat, origin.lng), (destination.lat, destination.lng)).miles
-            * self.config.geodesic_road_factor,
-            1,
-        )
-        est_hours = round(
-            direct_miles / self.config.fallback_speed_mph, 1
-        )
-        geometry = [[origin.lat, origin.lng], [destination.lat, destination.lng]]
+    def _route_geopoints(self, points: list[GeoPoint]) -> RouteResult:
+        origin, destination = points[0], points[-1]
+
+        # Geodesic fallback: sequential straight-line legs between stops.
+        legs = []
+        total_miles = 0.0
+        for index in range(len(points) - 1):
+            a, b = points[index], points[index + 1]
+            miles = round(
+                geodesic((a.lat, a.lng), (b.lat, b.lng)).miles
+                * self.config.geodesic_road_factor,
+                1,
+            )
+            total_miles += miles
+            legs.append(
+                {
+                    "origin": a.address,
+                    "destination": b.address,
+                    "distance_miles": miles,
+                    "duration_hours": round(
+                        miles / self.config.fallback_speed_mph, 1
+                    ),
+                }
+            )
+
+        direct_miles = round(total_miles, 1)
+        est_hours = round(direct_miles / self.config.fallback_speed_mph, 1)
+        geometry = [[point.lat, point.lng] for point in points]
         source = SRC_GEODESIC
 
         try:
-            route = self._fetch_osrm_route(origin, destination)
+            route = self._fetch_osrm_route(points)
             if route:
                 direct_miles = round(route["distance"] / 1609.34, 1)
                 est_hours = round(route["duration"] / 3600, 1)
                 geometry = [
                     [lat, lng] for lng, lat in route["geometry"]["coordinates"]
                 ]
+                legs = [
+                    {
+                        "origin": points[index].address,
+                        "destination": points[index + 1].address,
+                        "distance_miles": round(leg["distance"] / 1609.34, 1),
+                        "duration_hours": round(leg["duration"] / 3600, 1),
+                    }
+                    for index, leg in enumerate(route.get("legs", []))
+                    if index + 1 < len(points)
+                ]
                 source = SRC_OSRM
                 logger.info(
-                    "OSRM route fetched: %s miles, %s hrs", direct_miles, est_hours
+                    "OSRM route fetched: %s miles, %s hrs across %s stops",
+                    direct_miles,
+                    est_hours,
+                    len(points),
                 )
         except Exception as exc:  # noqa: BLE001
             logger.warning(
@@ -237,14 +309,14 @@ class Router:
             duration_hours=est_hours,
             geometry=geometry,
             source=source,
+            waypoints=points,
+            legs=legs,
         )
 
-    def _fetch_osrm_route(
-        self, origin: GeoPoint, destination: GeoPoint
-    ) -> Optional[dict]:
+    def _fetch_osrm_route(self, points: list[GeoPoint]) -> Optional[dict]:
+        coords = ";".join(f"{p.lng},{p.lat}" for p in points)
         url = (
-            f"{self.config.osrm_base_url}/route/v1/driving/"
-            f"{origin.lng},{origin.lat};{destination.lng},{destination.lat}"
+            f"{self.config.osrm_base_url}/route/v1/driving/{coords}"
             f"?overview=full&geometries=geojson"
         )
         headers = {"User-Agent": self.config.osrm_user_agent}
