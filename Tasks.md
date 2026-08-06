@@ -20,7 +20,7 @@ kanban-plugin: board
 
 - [ ] **Active Phase**: Phase 1 - Foundation, Cleanup & Data Schema
 - [ ] **Target Deliverable**: Clean repo root, persistent database schema for fleet assets, and saved route logging.
-- [x] **Overall Progress**: 7 / 15 Tasks Completed (46.7%)
+- [x] **Overall Progress**: 8 / 15 Tasks Completed (53.3%)
 
 
 ## 📌 Phase 1: Core Engine & Foundation
@@ -49,6 +49,9 @@ kanban-plugin: board
 	- **Prerequisites**: Task 2.1
 - [x] **Task 2.3: Operating Costs & Toll Engine** #priority/low
 	- **Description**: Compute fuel consumption and cost estimates from vehicle MPG, driver/operational per-mile rates, and tolls via `lanesight/core/costs.py`.
+	- **Prerequisites**: Task 2.1
+- [x] **Task 2.4: Commercial Route Controls & Constraints** #priority/high
+	- **Description**: Evaluate route compliance against vehicle height, gross weight, and hazmat limits via `lanesight/core/constraints.py`.
 	- **Prerequisites**: Task 2.1
 
 

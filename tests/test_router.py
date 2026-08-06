@@ -305,7 +305,9 @@ def test_route_result_to_json_contract():
         "source",
         "waypoints",
         "legs",
+        "compliance",
     }
+    assert payload["compliance"] is None
     assert set(payload["origin"]) == {"lat", "lng", "address"}
     assert len(payload["waypoints"]) == 2
     assert payload["legs"][0]["distance_miles"] == 410.5

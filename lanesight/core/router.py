@@ -19,7 +19,8 @@ from geopy.distance import geodesic
 from geopy.geocoders import ArcGIS, Nominatim
 from sqlmodel import Session
 
-from lanesight.models import SavedRoute
+from lanesight.core.constraints import RouteCompliance, evaluate_route_compliance
+from lanesight.models import SavedRoute, Vehicle
 
 logger = logging.getLogger("lanesight")
 
@@ -115,6 +116,7 @@ class RouteResult:
     source: str = SRC_GEODESIC  # "osrm" | "geodesic"
     waypoints: list = field(default_factory=list)  # list[GeoPoint], all ordered stops
     legs: list = field(default_factory=list)  # list[dict] per-stop breakdown
+    compliance: Optional[RouteCompliance] = None  # dispatch compliance result
 
     def to_dict(self) -> dict:
         """Serialize to a plain dict (JSON-friendly)."""
@@ -158,6 +160,7 @@ class Router:
         origin_str: str,
         destination_str: str,
         waypoints: Optional[list[str]] = None,
+        vehicle: Optional[Vehicle] = None,
     ) -> RouteResult:
         """Compute a driving route across one or more ordered stops.
 
@@ -167,6 +170,10 @@ class Router:
         the response is parsed into total distance/duration plus per-leg
         breakdowns. Falls back to sequential geodesic estimates if OSRM is
         unavailable.
+
+        When a ``vehicle`` is supplied, the route is evaluated against
+        commercial constraint limits and the resulting
+        :class:`RouteCompliance` is attached to the returned result.
 
         Raises ``ValueError`` if any location cannot be resolved.
         """
@@ -183,7 +190,10 @@ class Router:
         if unresolved:
             raise ValueError(f"Could not resolve location(s): {unresolved}")
 
-        return self._route_geopoints(resolved)
+        result = self._route_geopoints(resolved)
+        if vehicle is not None:
+            result.compliance = evaluate_route_compliance(vehicle)
+        return result
 
     def save_route(self, result: RouteResult, session: Session) -> SavedRoute:
         """Persist a computed route into the SQLite database.
