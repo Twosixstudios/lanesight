@@ -4,8 +4,16 @@ import folium
 import streamlit as st
 from streamlit_folium import st_folium
 
+from lanesight.core.hos import (
+    BREAK_DURATION_HOURS,
+    CYCLE_LIMIT_HOURS,
+    DAILY_DRIVE_LIMIT_HOURS,
+    DAILY_DUTY_WINDOW_HOURS,
+    calculate_route_hos,
+)
 from lanesight.core.router import Router
 from lanesight.hubs import MAJOR_FREIGHT_HUBS
+from lanesight.models import Driver
 
 logging.basicConfig(
     level=logging.INFO,
@@ -28,6 +36,18 @@ st.markdown("---")
 @st.cache_resource
 def get_router() -> Router:
     return Router()
+
+
+# Preset driver clock states used to populate the sidebar HOS inputs.
+DRIVER_PRESETS: dict[str, tuple[float, float, float] | None] = {
+    "Fresh Driver (11h / 14h / 70h)": (
+        DAILY_DRIVE_LIMIT_HOURS,
+        DAILY_DUTY_WINDOW_HOURS,
+        CYCLE_LIMIT_HOURS,
+    ),
+    "Fatigued Driver (5h / 8h / 45h)": (5.0, 8.0, 45.0),
+    "Custom Clocks": None,
+}
 
 
 # ------------------------------------------------------------------ #
@@ -91,9 +111,57 @@ with st.sidebar:
         waypoints.append(stop_input)
 
     st.markdown("---")
+    st.subheader("Driver Hours of Service (HOS)")
+
+
+    def _apply_driver_preset() -> None:
+        """Load the selected preset's clocks into the HOS number inputs."""
+        values = DRIVER_PRESETS[st.session_state["hos_preset"]]
+        if values is None:
+            return
+        (
+            st.session_state["hos_drive_in"],
+            st.session_state["hos_shift_in"],
+            st.session_state["hos_cycle_in"],
+        ) = values
+
+
+    st.selectbox(
+        "Driver Clock State",
+        options=list(DRIVER_PRESETS),
+        index=0,
+        key="hos_preset",
+        on_change=_apply_driver_preset,
+    )
+
+    st.session_state.setdefault("hos_drive_in", DAILY_DRIVE_LIMIT_HOURS)
+    st.session_state.setdefault("hos_shift_in", DAILY_DUTY_WINDOW_HOURS)
+    st.session_state.setdefault("hos_cycle_in", CYCLE_LIMIT_HOURS)
+
+    drive_remaining = st.number_input(
+        "Drive Hours Remaining",
+        min_value=0.0,
+        max_value=CYCLE_LIMIT_HOURS,
+        step=0.5,
+        key="hos_drive_in",
+    )
+    shift_remaining = st.number_input(
+        "Shift Hours Remaining",
+        min_value=0.0,
+        max_value=CYCLE_LIMIT_HOURS,
+        step=0.5,
+        key="hos_shift_in",
+    )
+    cycle_remaining = st.number_input(
+        "Cycle Hours Remaining",
+        min_value=0.0,
+        max_value=CYCLE_LIMIT_HOURS,
+        step=0.5,
+        key="hos_cycle_in",
+    )
+
+    st.markdown("---")
     calculate_btn = st.button("Calculate Route", type="primary", width="stretch")
-
-
 # ------------------------------------------------------------------ #
 # Route computation (wired directly into lanesight.core.router.route)
 # ------------------------------------------------------------------ #
@@ -124,6 +192,80 @@ else:
     m1.metric("Total Distance", f"{result.distance_miles:,.1f} miles")
     m2.metric("Total Duration", f"{result.duration_hours:,.1f} hours")
     m3.metric("Dispatch Status", "Route Active")
+
+    st.markdown("---")
+
+    # ------------------------------------------------------------------ #
+    # Hours of Service (HOS) compliance
+    # ------------------------------------------------------------------ #
+    driver = Driver(
+        name="Assigned Driver",
+        cdl_number="ASSIGNED-0001",
+        cdl_state="CA",
+        is_active=True,
+        drive_hours_remaining=drive_remaining,
+        shift_hours_remaining=shift_remaining,
+        cycle_hours_remaining=cycle_remaining,
+    )
+    hos = calculate_route_hos(result.duration_hours, driver)
+
+    st.subheader("Hours of Service (HOS) Compliance")
+
+    if hos["is_legal"]:
+        st.success(
+            f"HOS Compliant - trip fits within remaining driver clocks "
+            f"(estimated drive {result.duration_hours:,.1f} hrs)."
+        )
+    else:
+        st.error("HOS Violation / Out of Service - trip exceeds available driver hours.")
+
+    h1, h2 = st.columns(2)
+    h1.metric("Mandatory Rest Breaks", int(hos["required_breaks"]))
+    h2.metric(
+        "Total Elapsed Trip Time",
+        f"{hos['total_elapsed_hours']:,.1f} hrs",
+        delta=f"+{hos['required_breaks'] * BREAK_DURATION_HOURS:,.1f} breaks",
+        delta_color="off",
+        help="Estimated driving hours plus mandatory 30-minute rest breaks.",
+    )
+
+    c1, c2, c3 = st.columns(3)
+    drive_after = hos["updated_driver_clocks"]["drive_hours_remaining"]
+    shift_after = hos["updated_driver_clocks"]["shift_hours_remaining"]
+    cycle_after = hos["updated_driver_clocks"]["cycle_hours_remaining"]
+
+    c1.metric(
+        "Drive Hrs Remaining",
+        f"{drive_after:,.1f}",
+        delta=f"{drive_after - drive_remaining:+,.1f}",
+        delta_color="inverse",
+    )
+    c1.progress(
+        min(max(drive_after, 0.0) / DAILY_DRIVE_LIMIT_HOURS, 1.0),
+        text=f"{drive_remaining:,.1f}h → {drive_after:,.1f}h post-trip",
+    )
+
+    c2.metric(
+        "Shift Hrs Remaining",
+        f"{shift_after:,.1f}",
+        delta=f"{shift_after - shift_remaining:+,.1f}",
+        delta_color="inverse",
+    )
+    c2.progress(
+        min(max(shift_after, 0.0) / DAILY_DUTY_WINDOW_HOURS, 1.0),
+        text=f"{shift_remaining:,.1f}h → {shift_after:,.1f}h post-trip",
+    )
+
+    c3.metric(
+        "Cycle Hrs Remaining",
+        f"{cycle_after:,.1f}",
+        delta=f"{cycle_after - cycle_remaining:+,.1f}",
+        delta_color="inverse",
+    )
+    c3.progress(
+        min(max(cycle_after, 0.0) / CYCLE_LIMIT_HOURS, 1.0),
+        text=f"{cycle_remaining:,.1f}h → {cycle_after:,.1f}h post-trip",
+    )
 
     st.markdown("---")
 
