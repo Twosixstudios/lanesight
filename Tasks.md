@@ -20,7 +20,7 @@ kanban-plugin: board
 
 - [ ] **Active Phase**: Phase 1 - Foundation, Cleanup & Data Schema
 - [ ] **Target Deliverable**: Clean repo root, persistent database schema for fleet assets, and saved route logging.
-- [x] **Overall Progress**: 6 / 15 Tasks Completed (40.0%)
+- [x] **Overall Progress**: 7 / 15 Tasks Completed (46.7%)
 
 
 ## 📌 Phase 1: Core Engine & Foundation
@@ -47,8 +47,8 @@ kanban-plugin: board
 - [x] **Task 2.2: HOS & Rest Break Estimator** #priority/high
 	- **Description**: Calculate DOT 30-min break and 10-hr sleeper berth pauses based on driving hours.
 	- **Prerequisites**: Task 2.1
-- [ ] **Task 2.3: Commercial Route Controls** #priority/low
-	- **Description**: Add configuration flags for toll avoidance and highway routing preferences.
+- [x] **Task 2.3: Operating Costs & Toll Engine** #priority/low
+	- **Description**: Compute fuel consumption and cost estimates from vehicle MPG, driver/operational per-mile rates, and tolls via `lanesight/core/costs.py`.
 	- **Prerequisites**: Task 2.1
 
 
