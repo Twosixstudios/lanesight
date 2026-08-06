@@ -1,0 +1,1133 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+================================================================
+File Summary
+================================================================
+
+Purpose:
+--------
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+
+File Format:
+------------
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  a. A separator line (================)
+  b. The file path (File: path/to/file)
+  c. Another separator line
+  d. The full contents of the file
+  e. A blank line
+
+Usage Guidelines:
+-----------------
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+
+Notes:
+------
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+
+
+================================================================
+Directory Structure
+================================================================
+.devcontainer/
+  devcontainer.json
+.streamlit/
+  config.rtf
+lanesight/
+  core/
+    __init__.py
+    router.py
+  __init__.py
+  __main__.py
+  cli.py
+  hubs.py
+tests/
+  __init__.py
+  test_router.py
+.gitignore
+app.py
+bridge.mjs
+package.json
+README.md
+requirements.txt
+server.mjs
+Tasks.md
+
+================================================================
+Files
+================================================================
+
+================
+File: bridge.mjs
+================
+import express from 'express';
+import cors from 'cors';
+import { spawn } from 'child_process';
+
+const app = express();
+app.use(cors({ origin: '*', methods: '*' }));
+app.use(express.json());
+
+const sessions = new Map();
+
+// 1. Explicitly return 404 for OAuth discovery so Gemini skips OAuth
+app.use('/.well-known', (req, res) => {
+  res.status(404).json({ error: 'No OAuth required' });
+});
+
+app.get('/sse', (req, res) => {
+  const sessionId = Math.random().toString(36).substring(2);
+  
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.flushHeaders?.();
+
+  res.write(`event: endpoint\ndata: /message?sessionId=${sessionId}\n\n`);
+
+  // Safely spawn via npx without hardcoding internal package dist paths
+  const child = spawn('npx', ['-y', '@modelcontextprotocol/server-filesystem', '/Users/erikvilla/Lessons/lanesight'], {
+    stdio: ['pipe', 'pipe', 'inherit']
+  });
+
+  sessions.set(sessionId, child);
+
+  let buffer = '';
+  child.stdout.on('data', (chunk) => {
+    buffer += chunk.toString();
+    const lines = buffer.split('\n');
+    buffer = lines.pop();
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+        res.write(`event: message\ndata: ${trimmed}\n\n`);
+      }
+    }
+  });
+
+  req.on('close', () => {
+    child.kill();
+    sessions.delete(sessionId);
+  });
+});
+
+app.post('/message', (req, res) => {
+  const sessionId = req.query.sessionId;
+  const child = sessions.get(sessionId);
+  if (child && child.stdin.writable) {
+    child.stdin.write(JSON.stringify(req.body) + '\n');
+    res.status(200).send('Accepted');
+  } else {
+    res.status(404).send('Session not found');
+  }
+});
+
+app.use((req, res) => {
+  res.status(404).send('Not Found');
+});
+
+app.listen(8080, () => {
+  console.log('[bridge] MCP Bridge active on port 8080');
+});
+
+================
+File: package.json
+================
+{
+  "dependencies": {
+    "cors": "^2.8.6",
+    "express": "^5.2.1"
+  }
+}
+
+================
+File: server.mjs
+================
+import express from 'express';
+import cors from 'cors';
+import { spawn } from 'child_process';
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+const sessions = new Map();
+
+app.get('/sse', (req, res) => {
+  const sessionId = Math.random().toString(36).substring(2);
+  
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders?.();
+
+  const baseUrl = process.env.BASE_URL || 'http://localhost:8080';
+  const endpointUrl = `${baseUrl}/message?sessionId=${sessionId}`;
+  
+  res.write(`event: endpoint\ndata: ${endpointUrl}\n\n`);
+
+  // Spawn an isolated child process per connection session
+  const child = spawn('npx', ['-y', '@modelcontextprotocol/server-filesystem', '/Users/erikvilla/Lessons/lanesight'], {
+    stdio: ['pipe', 'pipe', 'inherit']
+  });
+
+  sessions.set(sessionId, child);
+
+  let buffer = '';
+  child.stdout.on('data', (chunk) => {
+    buffer += chunk.toString();
+    const lines = buffer.split('\n');
+    buffer = lines.pop();
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed) {
+        res.write(`event: message\ndata: ${trimmed}\n\n`);
+      }
+    }
+  });
+
+  req.on('close', () => {
+    child.kill();
+    sessions.delete(sessionId);
+  });
+});
+
+app.post('/message', (req, res) => {
+  const sessionId = req.query.sessionId;
+  const child = sessions.get(sessionId);
+  if (child && child.stdin.writable) {
+    child.stdin.write(JSON.stringify(req.body) + '\n');
+    res.status(200).send('Accepted');
+  } else {
+    res.status(400).send('Session inactive');
+  }
+});
+
+const PORT = 8080;
+app.listen(PORT, () => {
+  console.log(`[bridge] Multi-session MCP server running on port ${PORT}`);
+});
+
+================
+File: Tasks.md
+================
+# 🚚 LaneSight - Development Roadmap & Task Board
+
+> **Agent Instructions:** 
+> - Always check this file before starting work on a task.
+> - Only work on tasks marked as `[ ]` under the **Active Phase**.
+> - Once a task is completed and verified, update its status to `[x]` and commit `TASKS.md` alongside your code changes.
+
+---
+
+## 🎯 Current Status
+- **Active Phase:** Phase 1 - Foundation & Core Architecture
+- **Target Deliverable:** Initial project structure, database models, and baseline API routes.
+
+---
+
+## 📌 Phase 1: Foundation & Core Architecture
+- [ ] **Task 1.1: Environment & Directory Structure Setup**
+  - Verify Python virtual environment setup and dependencies.
+  - Establish modular folder layout (`app/`, `models/`, `routes/`, `tests/`).
+- [ ] **Task 1.2: Core Data Schema Definition**
+  - Define fleet asset data models (vehicles, drivers, routes, status logs).
+  - Set up SQLite/PostgreSQL database connection layer and migrations.
+- [ ] **Task 1.3: Baseline API / Backend Routing**
+  - Implement CRUD endpoints for vehicle tracking and driver assignments.
+  - Write initial unit test suite to validate database operations.
+
+---
+
+## 📌 Phase 2: Core Features & Logic Processing
+- [ ] **Task 2.1: Route & Asset Processing Engine**
+  - Create business logic for status updates and active route tracking.
+  - Implement error handling and logging for invalid data payloads.
+- [ ] **Task 2.2: User & Fleet Access Control**
+  - Add authentication baseline / role-based permissions.
+
+---
+
+## 📌 Phase 3: Dashboard & Visual Interfaces
+- [ ] **Task 3.1: Streamlit / Web UI Dashboard**
+  - Build real-time fleet oversight view.
+  - Connect UI components to backend API endpoints.
+
+---
+
+## 📝 Developer Notes & Context
+* **Backend Stack:** Python
+* **Local Runner:** `aider-composer` + Qwen 2.5 Coder 14B (LM Studio API)
+* **Architect:** Gemini CLI / Gemini Web App
+
+================
+File: .devcontainer/devcontainer.json
+================
+{
+  "name": "Python 3",
+  // Or use a Dockerfile or Docker Compose file. More info: https://containers.dev/guide/dockerfile
+  "image": "mcr.microsoft.com/devcontainers/python:1-3.11-bookworm",
+  "customizations": {
+    "codespaces": {
+      "openFiles": [
+        "README.md",
+        "app.py"
+      ]
+    },
+    "vscode": {
+      "settings": {},
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance"
+      ]
+    }
+  },
+  "updateContentCommand": "[ -f packages.txt ] && sudo apt update && sudo apt upgrade -y && sudo xargs apt install -y <packages.txt; [ -f requirements.txt ] && pip3 install --user -r requirements.txt; pip3 install --user streamlit; echo '✅ Packages installed and Requirements met'",
+  "postAttachCommand": {
+    "server": "streamlit run app.py --server.enableCORS false --server.enableXsrfProtection false"
+  },
+  "portsAttributes": {
+    "8501": {
+      "label": "Application",
+      "onAutoForward": "openPreview"
+    }
+  },
+  "forwardPorts": [
+    8501
+  ]
+}
+
+================
+File: lanesight/core/__init__.py
+================
+
+
+================
+File: lanesight/core/router.py
+================
+"""LaneSight routing & geocoding engine.
+
+Provides a standalone :class:`Router` that resolves origin/destination
+locations, fetches an OSRM driving route, and returns a structured
+:class:`RouteResult` serializable to JSON. Intended to be imported by
+other projects (e.g. Fleet Scout) without pulling in the Streamlit UI.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+from dataclasses import asdict, dataclass, field
+from typing import Optional
+
+import requests
+from geopy.distance import geodesic
+from geopy.geocoders import ArcGIS, Nominatim
+
+logger = logging.getLogger("lanesight")
+
+# 50 US State Abbreviation Mapping
+STATE_ABBREVS = {
+    "AL": "Alabama",
+    "AK": "Alaska",
+    "AZ": "Arizona",
+    "AR": "Arkansas",
+    "CA": "California",
+    "CO": "Colorado",
+    "CT": "Connecticut",
+    "DE": "Delaware",
+    "FL": "Florida",
+    "GA": "Georgia",
+    "HI": "Hawaii",
+    "ID": "Idaho",
+    "IL": "Illinois",
+    "IN": "Indiana",
+    "IA": "Iowa",
+    "KS": "Kansas",
+    "KY": "Kentucky",
+    "LA": "Louisiana",
+    "ME": "Maine",
+    "MD": "Maryland",
+    "MA": "Massachusetts",
+    "MI": "Michigan",
+    "MN": "Minnesota",
+    "MS": "Mississippi",
+    "MO": "Missouri",
+    "MT": "Montana",
+    "NE": "Nebraska",
+    "NV": "Nevada",
+    "NH": "New Hampshire",
+    "NJ": "New Jersey",
+    "NM": "New Mexico",
+    "NY": "New York",
+    "NC": "North Carolina",
+    "ND": "North Dakota",
+    "OH": "Ohio",
+    "OK": "Oklahoma",
+    "OR": "Oregon",
+    "PA": "Pennsylvania",
+    "RI": "Rhode Island",
+    "SC": "South Carolina",
+    "SD": "South Dakota",
+    "TN": "Tennessee",
+    "TX": "Texas",
+    "UT": "Utah",
+    "VT": "Vermont",
+    "VA": "Virginia",
+    "WA": "Washington",
+    "WV": "West Virginia",
+    "WI": "Wisconsin",
+    "WY": "Wyoming",
+}
+
+SRC_OSRM = "osrm"
+SRC_GEODESIC = "geodesic"
+
+
+@dataclass(frozen=True)
+class Config:
+    """Tunable settings for :class:`Router`."""
+
+    osrm_base_url: str = "https://router.project-osrm.org"
+    osrm_timeout: float = 8.0
+    geocode_timeout: float = 10.0
+    geodesic_road_factor: float = 1.2
+    fallback_speed_mph: float = 55.0
+    osrm_user_agent: str = "LaneSight-App/1.0 (twosixstudios.dev@gmail.com)"
+    geocode_user_agent: str = "lanesight_twosix_studios_v1"
+
+
+@dataclass(frozen=True)
+class GeoPoint:
+    """A resolved point of interest with its address."""
+
+    lat: float
+    lng: float
+    address: str
+
+
+@dataclass
+class RouteResult:
+    """Structured output of a routing request (JSON-serializable)."""
+
+    origin: GeoPoint
+    destination: GeoPoint
+    distance_miles: float
+    duration_hours: float
+    geometry: list = field(default_factory=list)  # list of [lat, lng]
+    source: str = SRC_GEODESIC  # "osrm" | "geodesic"
+
+    def to_dict(self) -> dict:
+        """Serialize to a plain dict (JSON-friendly)."""
+        return asdict(self)
+
+    def to_json(self, indent: int = 2) -> str:
+        """Serialize to an indented JSON string."""
+        return json.dumps(self.to_dict(), indent=indent)
+
+
+class Router:
+    """Resolves locations and computes driving routes/transit metrics."""
+
+    def __init__(self, config: Optional[Config] = None):
+        self.config = config or Config()
+
+    # ------------------------------------------------------------------ #
+    # Public API
+    # ------------------------------------------------------------------ #
+    def geocode(self, location_name: str) -> Optional[GeoPoint]:
+        """Convert a location string into a :class:`GeoPoint` or ``None``."""
+        normalized = self._normalize_us_location(location_name)
+        logger.info(
+            "Geocoding query: %r (raw input: %r)", normalized, location_name
+        )
+
+        for geocoder_factory in (self._arcgis_point, self._nominatim_point):
+            point = geocoder_factory(normalized)
+            if point is not None:
+                logger.info(
+                    "Geocode success -> %s (%s, %s)",
+                    point.address,
+                    point.lat,
+                    point.lng,
+                )
+                return point
+        return None
+
+    def route(self, origin_str: str, destination_str: str) -> RouteResult:
+        """Compute distance, transit time, and geometry between two locations.
+
+        Raises ``ValueError`` if either location cannot be resolved.
+        """
+        origin = self.geocode(origin_str)
+        destination = self.geocode(destination_str)
+
+        if origin is None or destination is None:
+            unresolved = [
+                name
+                for name, pt in ((origin_str, origin), (destination_str, destination))
+                if pt is None
+            ]
+            raise ValueError(f"Could not resolve location(s): {unresolved}")
+
+        return self._route_geopoints(origin, destination)
+
+    # ------------------------------------------------------------------ #
+    # Fallback geocoders
+    # ------------------------------------------------------------------ #
+    def _arcgis_point(self, query: str) -> Optional[GeoPoint]:
+        try:
+            location = ArcGIS(
+                user_agent=self.config.geocode_user_agent
+            ).geocode(query, timeout=self.config.geocode_timeout)
+            if location:
+                return GeoPoint(
+                    lat=location.latitude,
+                    lng=location.longitude,
+                    address=location.address,
+                )
+        except Exception as exc:  # noqa: BLE001 - tolerate provider failures
+            logger.warning("ArcGIS geocoding failed: %s", exc)
+        return None
+
+    def _nominatim_point(self, query: str) -> Optional[GeoPoint]:
+        try:
+            location = Nominatim(
+                user_agent=self.config.geocode_user_agent
+            ).geocode(query, timeout=self.config.geocode_timeout)
+            if location:
+                return GeoPoint(
+                    lat=location.latitude,
+                    lng=location.longitude,
+                    address=location.address,
+                )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Nominatim geocoding failed: %s", exc)
+        return None
+
+    # ------------------------------------------------------------------ #
+    # Routing
+    # ------------------------------------------------------------------ #
+    def _route_geopoints(self, origin: GeoPoint, destination: GeoPoint) -> RouteResult:
+        direct_miles = round(
+            geodesic((origin.lat, origin.lng), (destination.lat, destination.lng)).miles
+            * self.config.geodesic_road_factor,
+            1,
+        )
+        est_hours = round(
+            direct_miles / self.config.fallback_speed_mph, 1
+        )
+        geometry = [[origin.lat, origin.lng], [destination.lat, destination.lng]]
+        source = SRC_GEODESIC
+
+        try:
+            route = self._fetch_osrm_route(origin, destination)
+            if route:
+                direct_miles = round(route["distance"] / 1609.34, 1)
+                est_hours = round(route["duration"] / 3600, 1)
+                geometry = [
+                    [lat, lng] for lng, lat in route["geometry"]["coordinates"]
+                ]
+                source = SRC_OSRM
+                logger.info(
+                    "OSRM route fetched: %s miles, %s hrs", direct_miles, est_hours
+                )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "OSRM routing failed, using geodesic fallback: %s", exc
+            )
+
+        return RouteResult(
+            origin=origin,
+            destination=destination,
+            distance_miles=direct_miles,
+            duration_hours=est_hours,
+            geometry=geometry,
+            source=source,
+        )
+
+    def _fetch_osrm_route(
+        self, origin: GeoPoint, destination: GeoPoint
+    ) -> Optional[dict]:
+        url = (
+            f"{self.config.osrm_base_url}/route/v1/driving/"
+            f"{origin.lng},{origin.lat};{destination.lng},{destination.lat}"
+            f"?overview=full&geometries=geojson"
+        )
+        headers = {"User-Agent": self.config.osrm_user_agent}
+        response = requests.get(url, headers=headers, timeout=self.config.osrm_timeout)
+        response.raise_for_status()
+        data = response.json()
+        if data.get("routes"):
+            return data["routes"][0]
+        return None
+
+    # ------------------------------------------------------------------ #
+    # Helpers
+    # ------------------------------------------------------------------ #
+    @staticmethod
+    def _normalize_us_location(location_name: str) -> str:
+        """Expand state abbreviations (e.g. 'Ontario, CA' -> 'Ontario, California, USA').
+
+        Prevents Canada/international geocoding mix-ups.
+        """
+        clean = location_name.strip()
+        parts = [p.strip() for p in clean.split(",")]
+
+        if len(parts) >= 2:
+            state_part = parts[1].upper()
+            if state_part in STATE_ABBREVS:
+                parts[1] = STATE_ABBREVS[state_part]
+                if len(parts) == 2:
+                    parts.append("USA")
+                return ", ".join(parts)
+
+        if "usa" not in clean.lower() and "united states" not in clean.lower():
+            clean += ", USA"
+
+        return clean
+
+================
+File: lanesight/__init__.py
+================
+"""LaneSight: freight route visualizer & transit time engine."""
+
+from lanesight.core.router import Config, GeoPoint, RouteResult, Router
+
+__all__ = ["Config", "GeoPoint", "RouteResult", "Router"]
+__version__ = "1.0.0"
+
+================
+File: lanesight/__main__.py
+================
+from lanesight.cli import main
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+
+================
+File: lanesight/cli.py
+================
+"""Command-line interface for LaneSight.
+
+Allows standalone routing/geocoding and JSON export without the Streamlit
+UI, e.g.: ``python -m lanesight route "San Bernardino, CA" "Oakland, CA"``.
+"""
+
+from __future__ import annotations
+
+import argparse
+import logging
+import sys
+from typing import Optional
+
+from lanesight.core.router import Config, Router
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="lanesight",
+        description="LaneSight routing & geocoding engine (JSON output).",
+    )
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    route = sub.add_parser("route", help="Compute a route between two locations.")
+    route.add_argument("origin", help="Origin location string.")
+    route.add_argument("destination", help="Destination location string.")
+    route.add_argument(
+        "--output",
+        "-o",
+        help="Write JSON to a file instead of stdout.",
+    )
+    route.add_argument(
+        "--osrm-base-url",
+        default=None,
+        help="Override the OSRM server base URL.",
+    )
+    route.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Enable INFO-level logging to stderr.",
+    )
+    return parser
+
+
+def main(argv: Optional[list] = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+
+    if args.command == "route":
+        return _run_route(args)
+    parser.error(f"Unknown command: {args.command}")
+    return 2
+
+
+def _run_route(args: argparse.Namespace) -> int:
+    if args.verbose:
+        logging.basicConfig(
+            level=logging.INFO, format="[LaneSight] %(levelname)s: %(message)s"
+        )
+
+    if args.osrm_base_url:
+        config = Config(osrm_base_url=args.osrm_base_url)
+    else:
+        config = Config()
+
+    router = Router(config)
+    try:
+        result = router.route(args.origin, args.destination)
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    payload = result.to_json() + "\n"
+    if args.output:
+        with open(args.output, "w", encoding="utf-8") as fh:
+            fh.write(payload)
+    else:
+        sys.stdout.write(payload)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+
+================
+File: lanesight/hubs.py
+================
+"""Major US freight market hubs used as quick-select options."""
+
+MAJOR_FREIGHT_HUBS = [
+    "San Bernardino, CA",
+    "Ontario, CA",
+    "Los Angeles, CA",
+    "Fresno, CA",
+    "Oakland, CA",
+    "Phoenix, AZ",
+    "Las Vegas, NV",
+    "Salt Lake City, UT",
+    "Seattle, WA",
+    "Portland, OR",
+    "Dallas, TX",
+    "Houston, TX",
+    "San Antonio, TX",
+    "El Paso, TX",
+    "Laredo, TX",
+    "Chicago, IL",
+    "Indianapolis, IN",
+    "Columbus, OH",
+    "Memphis, TN",
+    "Nashville, TN",
+    "Atlanta, GA",
+    "Charlotte, NC",
+    "Jacksonville, FL",
+    "Miami, FL",
+    "Kansas City, MO",
+    "St. Louis, MO",
+    "Minneapolis, MN",
+    "Denver, CO",
+    "Newark, NJ",
+    "Harrisburg, PA",
+]
+
+================
+File: tests/__init__.py
+================
+
+
+================
+File: tests/test_router.py
+================
+"""Tests for lanesight.core.router."""
+
+import json
+
+import pytest
+import responses
+
+from lanesight.core.router import (
+    Config,
+    GeoPoint,
+    RouteResult,
+    Router,
+    SRC_GEODESIC,
+    SRC_OSRM,
+)
+
+ORIGIN = GeoPoint(lat=34.1083, lng=-117.2898, address="San Bernardino, CA, USA")
+DEST = GeoPoint(lat=37.8044, lng=-122.2712, address="Oakland, CA, USA")
+
+OSRM_URL = (
+    f"{Config().osrm_base_url}/route/v1/driving/"
+    f"{ORIGIN.lng},{ORIGIN.lat};{DEST.lng},{DEST.lat}"
+    f"?overview=full&geometries=geojson"
+)
+
+
+def make_route(use_gear=False, source=SRC_GEODESIC):
+    return RouteResult(
+        origin=ORIGIN,
+        destination=DEST,
+        distance_miles=410.5,
+        duration_hours=7.4,
+        geometry=[[ORIGIN.lat, ORIGIN.lng], [DEST.lat, DEST.lng]],
+        source=source,
+    )
+
+
+# ---------------------------------------------------------------------- #
+# normalize_us_location
+# ---------------------------------------------------------------------- #
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ("Ontario, CA", "Ontario, California, USA"),
+        ("San Bernardino, CA, 92410", "San Bernardino, California, 92410"),
+        ("Oakland, California", "Oakland, California, USA"),
+        ("Toronto", "Toronto, USA"),
+        ("New York, NY", "New York, New York, USA"),
+    ],
+)
+def test_normalize_us_location(raw, expected):
+    assert Router._normalize_us_location(raw) == expected
+
+
+# ---------------------------------------------------------------------- #
+# geocode fallback order
+# ---------------------------------------------------------------------- #
+def test_geocode_fallback_to_nominatim(monkeypatch):
+    router = Router()
+    monkeypatch.setattr(
+        router, "_arcgis_point", lambda query: None
+    )
+    monkeypatch.setattr(
+        router, "_nominatim_point", lambda query: GeoPoint(40.0, -75.0, "PH")
+    )
+    assert router.geocode("Philly, PA") == GeoPoint(40.0, -75.0, "PH")
+
+
+def test_geocode_returns_none_when_all_fail(monkeypatch):
+    router = Router()
+    monkeypatch.setattr(router, "_arcgis_point", lambda query: None)
+    monkeypatch.setattr(router, "_nominatim_point", lambda query: None)
+    assert router.geocode("Nowhere, ZZ") is None
+
+
+# ---------------------------------------------------------------------- #
+# routing
+# ---------------------------------------------------------------------- #
+@responses.activate
+def test_route_osrm_success(monkeypatch):
+    monkeypatch.setattr(
+        Router, "geocode", lambda self, loc: ORIGIN if "San" in loc else DEST
+    )
+    geometry = [[ORIGIN.lat, ORIGIN.lng], [34.5, -118.0], [DEST.lat, DEST.lng]]
+    payload = {
+        "routes": [
+            {
+                "distance": 660556.0,  # ~410.5 miles
+                "duration": 26640.0,  # 7.4 hours
+                "geometry": {
+                    "coordinates": [
+                        [ORIGIN.lng, ORIGIN.lat],
+                        [-118.0, 34.5],
+                        [DEST.lng, DEST.lat],
+                    ]
+                },
+            }
+        ]
+    }
+    responses.add(responses.GET, OSRM_URL, json=payload, status=200)
+
+    result = Router().route("San Bernardino, CA", "Oakland, CA")
+
+    assert result.distance_miles == 410.5
+    assert result.duration_hours == 7.4
+    assert result.source == SRC_OSRM
+    assert result.geometry == geometry
+
+
+@responses.activate
+def test_route_geodesic_fallback(monkeypatch):
+    monkeypatch.setattr(
+        Router, "geocode", lambda self, loc: ORIGIN if "San" in loc else DEST
+    )
+    responses.add(responses.GET, OSRM_URL, status=500)
+
+    result = Router().route("San Bernardino, CA", "Oakland, CA")
+
+    assert result.source == SRC_GEODESIC
+    assert result.geometry == [[ORIGIN.lat, ORIGIN.lng], [DEST.lat, DEST.lng]]
+    assert result.distance_miles > 0
+    assert result.duration_hours > 0
+
+
+def test_route_raises_on_unresolvable(monkeypatch):
+    monkeypatch.setattr(Router, "geocode", lambda self, loc: None)
+    with pytest.raises(ValueError):
+        Router().route("Nowhere, ZZ", "Also Nowhere")
+
+
+# ---------------------------------------------------------------------- #
+# JSON contract
+# ---------------------------------------------------------------------- #
+def test_route_result_to_json_contract():
+    result = make_route()
+    payload = result.to_dict()
+    assert set(payload) == {
+        "origin",
+        "destination",
+        "distance_miles",
+        "duration_hours",
+        "geometry",
+        "source",
+    }
+    assert set(payload["origin"]) == {"lat", "lng", "address"}
+
+    reparsed = json.loads(result.to_json())
+    assert reparsed == payload
+
+
+# ---------------------------------------------------------------------- #
+# CLI
+# ---------------------------------------------------------------------- #
+def test_cli_main(monkeypatch, capsys):
+    from lanesight.cli import main
+
+    monkeypatch.setattr(
+        Router, "route", lambda self, o, d: make_route(source=SRC_OSRM)
+    )
+    assert main(["route", "San Bernardino, CA", "Oakland, CA"]) == 0
+    out = capsys.readouterr().out
+    assert json.loads(out)["source"] == SRC_OSRM
+
+
+def test_cli_failure_exit_code(monkeypatch, capsys):
+    from lanesight.cli import main
+
+    monkeypatch.setattr(Router, "route", lambda self, o, d: (_ for _ in ()).throw(ValueError("x")))
+    assert main(["route", "X", "Y"]) == 1
+    assert "Error" in capsys.readouterr().err
+
+================
+File: .gitignore
+================
+venv/
+__pycache__/
+*.pyc
+.DS_Store
+.env
+
+================
+File: README.md
+================
+# 🗺️ LaneSight
+
+[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://lanesight.streamlit.app/)
+
+> **Live Application:** [lanesight.streamlit.app](https://lanesight.streamlit.app/)
+
+**LaneSight** is an open-source freight route visualizer and transit time engine designed to give dispatchers, brokers, and fleet managers macro route visibility, driving mile calculations, and baseline transit metrics without requiring proprietary mapping API keys or paid billing setups.
+
+Built with precision by **Two Six Studios**.
+
+---
+
+## ✨ Features
+
+* **Instant Geocoding:** Converts address and city inputs into precise latitude/longitude coordinates using OpenStreetMap's Nominatim engine.
+* **OSRM Routing Integration:** Pulls real road network geometry, driving mileage, and estimated transit hours.
+* **Interactive Dark-Mode Map:** Embedded Folium rendering with customizable pickup (origin) and dropoff (destination) markers alongside a highlighted route polyline.
+* **Zero Billing / No-Key Architecture:** Runs 100% on open-source GIS tools without API rate limits or credit card requirements.
+
+---
+
+## 🛠️ Tech Stack
+
+* **Framework:** Python 3, Streamlit
+* **Geospatial & Mapping:** Folium, streamlit-folium
+* **Geocoding & Routing:** geopy, OSRM (Open Source Routing Machine)
+* **Version Control:** Git, GitHub
+
+---
+
+## ⚡ Quick Start
+
+1. Clone the repository:
+   git clone https://github.com/TwoSixStudios/lanesight.git
+   cd lanesight
+
+2. Set up a virtual environment:
+   python3 -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+3. Install dependencies:
+   pip install -r requirements.txt
+
+4. Run the Streamlit app:
+   streamlit run app.py
+
+================
+File: requirements.txt
+================
+requests>=2.32.3
+geopy>=2.4.1
+streamlit>=1.37.1
+folium>=0.17.0
+streamlit-folium>=0.23.1
+pytest>=8.3.2
+responses>=0.25.3
+
+================
+File: app.py
+================
+import logging
+
+import folium
+import streamlit as st
+from streamlit_folium import st_folium
+
+from lanesight.core.router import Router
+from lanesight.hubs import MAJOR_FREIGHT_HUBS
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="[LaneSight] %(levelname)s: %(message)s",
+)
+
+st.set_page_config(
+    page_title="LaneSight | Dispatch & Transit Engine",
+    page_icon=":world_map:",
+    layout="wide",
+)
+
+st.title(":world_map: LaneSight")
+st.caption(
+    "Open-source freight route visualizer & transit time engine by Two Six Studios"
+)
+st.markdown("---")
+
+col1, col2, col3 = st.columns([3, 3, 2])
+
+with col1:
+    origin_select = st.selectbox(
+        "Origin Location",
+        options=MAJOR_FREIGHT_HUBS + ["Custom Location..."],
+        index=0,  # San Bernardino, CA
+    )
+    if origin_select == "Custom Location...":
+        origin_input = st.text_input(
+            "Enter Custom Origin", value="San Bernardino, California"
+        )
+    else:
+        origin_input = origin_select
+
+with col2:
+    dest_select = st.selectbox(
+        "Destination Location",
+        options=MAJOR_FREIGHT_HUBS + ["Custom Location..."],
+        index=4,  # Oakland, CA
+    )
+    if dest_select == "Custom Location...":
+        dest_input = st.text_input(
+            "Enter Custom Destination", value="Oakland, California"
+        )
+    else:
+        dest_input = dest_select
+
+with col3:
+    st.write("##")
+    calculate_btn = st.button(
+        "Calculate Route", type="primary", use_container_width=True
+    )
+
+
+@st.cache_resource
+def get_router() -> Router:
+    return Router()
+
+
+# Force recalculation when button is clicked or state is uninitialized
+if calculate_btn or ("route_result" not in st.session_state):
+    with st.spinner("Fetching route geometry & calculating transit metrics..."):
+        try:
+            st.session_state["route_result"] = get_router().route(
+                origin_input, dest_input
+            )
+        except ValueError:
+            st.session_state["route_result"] = None
+
+result = st.session_state.get("route_result")
+
+if not result:
+    st.error(
+        "Could not resolve locations or calculate route. Please verify city names."
+    )
+else:
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Driving Distance", f"{result.distance_miles} miles")
+    m2.metric("Est. Driving Time", f"{result.duration_hours} hours")
+    m3.metric("Dispatch Status", "Route Active")
+
+    st.markdown("---")
+
+    orig = result.origin
+    dest = result.destination
+
+    center_lat = (orig.lat + dest.lat) / 2
+    center_lng = (orig.lng + dest.lng) / 2
+
+    m = folium.Map(
+        location=[center_lat, center_lng],
+        zoom_start=6,
+        tiles="CartoDB dark_matter",
+    )
+
+    folium.Marker(
+        [orig.lat, orig.lng],
+        popup=f"Pickup: {orig.address}",
+        tooltip="Origin (Pickup)",
+        icon=folium.Icon(color="green", icon="play"),
+    ).add_to(m)
+
+    folium.Marker(
+        [dest.lat, dest.lng],
+        popup=f"Dropoff: {dest.address}",
+        tooltip="Destination (Dropoff)",
+        icon=folium.Icon(color="red", icon="stop"),
+    ).add_to(m)
+
+    folium.PolyLine(
+        locations=result.geometry,
+        color="#00D2FF",
+        weight=4,
+        opacity=0.8,
+    ).add_to(m)
+
+    st_folium(m, width="100%", height=500)
+
+
+
+
+
+================================================================
+End of Codebase
+================================================================
