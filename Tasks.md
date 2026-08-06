@@ -17,7 +17,7 @@ kanban-plugin: board
 
 - [ ] **Active Phase**: Phase 1 - Foundation, Cleanup & Data Schema
 - [ ] **Target Deliverable**: Clean repo root, persistent database schema for fleet assets, and saved route logging.
-- [ ] **Overall Progress**: 2 / 15 Tasks Completed (13.3%)
+- [x] **Overall Progress**: 4 / 15 Tasks Completed (26.7%)
 
 
 ## 📌 Phase 1: Core Engine & Foundation
@@ -34,7 +34,7 @@ kanban-plugin: board
 	- **Description**: Delete legacy Express bridge files (`bridge.mjs`, `server.mjs`, `package.json`) and update `.gitignore`.
 	- **Prerequisites**: Task 1.2
 
-- [ ] **Task 1.4: Database Layer & Fleet Schema** #priority/high
+- [x] **Task 1.4: Database Layer & Fleet Schema** #priority/high
 	- **Description**: Integrate SQLite database layer using SQLAlchemy/SQLModel for routes, vehicles, and logs.
 	- **Prerequisites**: Task 1.3
 
