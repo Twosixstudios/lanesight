@@ -195,6 +195,20 @@ class Router:
             result.compliance = evaluate_route_compliance(vehicle)
         return result
 
+    def update_eta(
+        self, remaining_distance: float, average_speed: float
+    ) -> float:
+        """Estimate hours remaining given remaining distance (miles) and
+        average speed (mph).
+
+        Raises ``ValueError`` for negative distances or non-positive speeds.
+        """
+        if remaining_distance < 0:
+            raise ValueError("remaining_distance must be non-negative")
+        if average_speed <= 0:
+            raise ValueError("average_speed must be positive")
+        return round(remaining_distance / average_speed, 2)
+
     def save_route(self, result: RouteResult, session: Session) -> SavedRoute:
         """Persist a computed route into the SQLite database.
 

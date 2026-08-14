@@ -30,12 +30,24 @@ from lanesight.core.hos import (
     calculate_sleeper_berth_reset,
 )
 from lanesight.core.router import Config, GeoPoint, RouteResult, Router
+from lanesight.core.telemetry import (
+    GPS_DRIFT_TOLERANCE_METERS,
+    MatchResult,
+    TelemetryPoint,
+    TelemetrySession,
+    match_to_route,
+)
 
 __all__ = [
     "Config",
     "GeoPoint",
     "RouteResult",
     "Router",
+    "GPS_DRIFT_TOLERANCE_METERS",
+    "MatchResult",
+    "TelemetryPoint",
+    "TelemetrySession",
+    "match_to_route",
     "CostBreakdown",
     "calculate_route_costs",
     "calculate_route_costs_for_vehicle",

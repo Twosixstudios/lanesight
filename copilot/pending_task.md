@@ -1,21 +1,21 @@
-# Task ID: 4.3 - Test Suite Expansion
+# Task ID: 5.1 - Live Telemetry & GPS Matching
 
 ## Objective
-1. Expand the `pytest` suite to provide comprehensive coverage for multi-stop routing logic and HOS calculation edge cases.
-2. Ensure all new tests are integrated into the existing CI/CD pipeline.
+1. Implement a telemetry ingestion module to process live GPS coordinates.
+2. Develop a matching algorithm to compare current vehicle location against the active OSRM route polyline to calculate remaining distance and ETA.
 
 ## Target Files
-- `tests/test_routing.py` (or relevant test file)
-- `tests/test_hos.py` (or relevant test file)
+- `lanesight/core/telemetry.py` (New)
+- `lanesight/core/router.py`
 - `lanesight/Tasks.md`
 
 ## Step-by-Step Requirements
-1. Develop unit and integration tests for `lanesight.core.router.route()` specifically targeting multi-stop waypoints (e.g., 3+ stops, circular routes, and invalid waypoint sequences).
-2. Develop tests for `lanesight.core.hos` to verify 30-minute break triggers and 10-hour sleeper berth reset logic under various driving hour scenarios.
-3. Ensure all tests use `pytest` and mock external dependencies where necessary to maintain speed and reliability.
-4. Update `lanesight/Tasks.md` to mark Task 4.3 as `[x]` and update the overall progress to 15/15.
+1. Create `lanesight/core/telemetry.py` to handle incoming GPS data points (lat, lon, timestamp).
+2. Implement a function `match_to_route(current_coords, route_polyline)` that identifies the nearest point on the route and calculates the remaining distance to the destination.
+3. Update `lanesight/core/router.py` to expose an `update_eta(remaining_distance, average_speed)` method.
+4. Update `lanesight/Tasks.md` to mark Task 5.1 as `[x]` and update the Active Phase to Phase 5.
 
 ## Guardrails & Verification
-- All tests must pass with `python -m pytest`.
-- Maintain 100% pass rate for existing tests.
-- Run `git add . && git commit -m "feat(test): complete Task 4.3 - Test Suite Expansion" && git push origin main` upon successful verification.
+- Ensure the matching algorithm handles GPS drift (e.g., tolerance threshold of 50 meters).
+- All new logic must be covered by unit tests in `tests/test_telemetry.py`.
+- Run `git add . && git commit -m "feat(telemetry): complete Task 5.1 - Live Telemetry & GPS Matching" && git push origin main` upon successful verification.

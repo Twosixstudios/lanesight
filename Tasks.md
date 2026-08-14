@@ -16,9 +16,9 @@ kanban-plugin: list
 
 ## 🎯 Current Status
 
-- [ ] **Active Phase**: Phase 3 - Interactive UI & Dispatch Dashboard
+- [x] **Active Phase**: Phase 5 - Fleet Scout Live Integration
 - [ ] **Target Deliverable**: Interactive Streamlit UI featuring multi-stop route visualizer, HOS duty clock status, route financial cost breakdown, and persistent dispatch log views.
-- [x] **Overall Progress**: 15 / 15 Tasks Completed (100%)
+- [x] **Overall Progress**: 16 / 17 Tasks Completed (94.1%)
 
 
 ## 📌 Phase 1: Core Engine & Foundation
@@ -81,7 +81,7 @@ kanban-plugin: list
 
 ## 📡 Phase 5: Fleet Scout Live Integration
 
-- [ ] **Task 5.1: Live Telemetry & GPS Matching** #priority/high
+- [x] **Task 5.1: Live Telemetry & GPS Matching** #priority/high
 	- **Description**: Recalculate remaining distance and ETA in real time using active GPS coordinates.
 	- **Prerequisites**: Task 4.2
 - [ ] **Task 5.2: Route Deviation Alerts** #priority/medium
