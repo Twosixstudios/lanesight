@@ -1,40 +1,49 @@
 # 🤖 OpenCode Execution Report
-
-**Task:** Task 3.3 - Cost Efficiency Analytics
-**Timestamp:** 2026-08-13T20:51:00Z
-**Status:** ✅ Complete
-
----
+**Timestamp:** Thu Aug 13 22:40:00 PDT 2026
 
 ### 📁 Modified Files:
 ```text
-app.py                        (wired lanesight.core.costs into dashboard + Cost Assumptions sidebar)
-tests/test_app_costs.py       (new: 3 Streamlit AppTest UI tests)
-Tasks.md                      (marked Task 3.3 [x], progress 11/15 → 12/15)
-copilot/build_result.md       (this report)
+ M copilot/build_result.md
+?? copilot/pending_task.md
+?? copilot/run_build.js
+?? copilot/run_build.sh
+?? copilot/watch.sh
 ```
 
 ### 📜 Execution Logs:
 ```text
-$ venv/bin/python -m pytest tests/test_app_costs.py -q
-...                                                                      [100%]
-3 passed in 1.16s
+Task ID: 4.2 - FastAPI Headless Wrapper
+Status: All requirements already implemented in commit 43569da and pushed to origin/main.
 
-$ venv/bin/python -m pytest
-tests/test_app_costs.py ...                                              [  4%]
-tests/test_app_hos.py ....                                               [ 10%]
-tests/test_constraints.py ............                                   [ 28%]
-tests/test_costs.py ............                                         [ 46%]
-tests/test_database.py ...                                               [ 50%]
-tests/test_hos.py ...............                                        [ 73%]
-tests/test_router.py ..................                                  [100%]
+$ git log --oneline -3
+43569da feat(api): complete Task 4.2 - FastAPI Headless Wrapper
+d6ef421 feat(sdk): complete Task 4.1 - Core SDK Packaging
+11441db feat: wire cost efficiency analytics into Streamlit dashboard with AppTest UI suite
 
-============================== 67 passed in 2.31s ==============================
+Verified deliverables:
+- lanesight/api/schemas.py — Pydantic request/response models (RouteRequest, GeocodeRequest,
+  RouteResponse, GeocodeResponse, GeoPoint, VehicleSpecs). No DB internals exposed.
+- lanesight/api/main.py — FastAPI app with POST /api/v1/route (Router.route + optional
+  evaluate_route_compliance) and POST /api/v1/geocode (Router.geocode). Unresolvable
+  locations -> 404; validation failures -> 422. OpenAPI/Swagger at /docs.
+- tests/test_api.py — 10 TestClient tests (health, OpenAPI paths, geocode success/404/422,
+  route success/waypoints/vehicle compliance/404/422).
+
+$ ./venv/bin/python3 -m pytest tests/test_api.py -q
+10 passed, 1 warning in 2.45s
+
+$ ./venv/bin/python3 -m pytest -q
+77 passed, 1 warning in 5.16s
+
+Full suite green. Task 4.2 marked [x] in Tasks.md (Overall Progress: 14/15, 93.3%).
+
+Git state before this run:
+ M copilot/build_result.md
+?? copilot/pending_task.md
+?? copilot/run_build.js
+?? copilot/run_build.sh
+?? copilot/watch.sh
+
+Action: stage copilot workflow artifacts (pending_task.md, run_build.*, watch.sh) and
+build_result.md, commit, and push origin main.
 ```
-
-### ✅ Verification
-- Full pytest suite passes: **67 passed** (baseline 64 + 3 new `test_app_costs.py` tests).
-- All new tests hermetic: `Router.route` monkeypatched, no live geocoding/OSRM/network calls.
-- `lanesight/core/costs.py`, `hos.py`, `router.py`, `models.py` untouched (engine from Task 2.3).
-- Tests cover: default metrics render (410.5 mi @ 6.5 MPG, $4.25/gal, $0.65/mi, $0 tolls), custom input updates, and zero-distance guard (`Cost per Mile` shows `$0.00`, no exception).
-- `Tasks.md` Task 3.3 marked `[x]`; kanban settings block untouched.
