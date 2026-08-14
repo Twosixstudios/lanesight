@@ -256,6 +256,263 @@ def test_route_multi_stop_no_waypoints_single_leg(monkeypatch):
 
 
 # ---------------------------------------------------------------------- #
+# 3+ stop / dense waypoint sequences
+# ---------------------------------------------------------------------- #
+BAK = GeoPoint(lat=35.3733, lng=-119.0187, address="Bakersfield, CA, USA")
+STK = GeoPoint(lat=37.9577, lng=-121.2908, address="Stockton, CA, USA")
+FOUR_STOP_URL = (
+    f"{Config().osrm_base_url}/route/v1/driving/"
+    f"{ORIGIN.lng},{ORIGIN.lat};{BAK.lng},{BAK.lat};{MID.lng},{MID.lat};"
+    f"{DEST.lng},{DEST.lat}?overview=full&geometries=geojson"
+)
+
+
+def _four_stop_geocode(self, loc):
+    if "San" in loc:
+        return ORIGIN
+    if "Bakersfield" in loc:
+        return BAK
+    if "Fresno" in loc:
+        return MID
+    return DEST
+
+
+@responses.activate
+def test_route_four_stops_osrm_full_sequence(monkeypatch):
+    monkeypatch.setattr(Router, "geocode", _four_stop_geocode)
+    payload = {
+        "routes": [
+            {
+                "distance": 1035000.0,  # ~643 mi total
+                "duration": 41400.0,  # 11.5 hours
+                "geometry": {
+                    "coordinates": [
+                        [ORIGIN.lng, ORIGIN.lat],
+                        [-119.0, 35.3],
+                        [BAK.lng, BAK.lat],
+                        [-119.7, 36.3],
+                        [MID.lng, MID.lat],
+                        [-121.2, 37.9],
+                        [DEST.lng, DEST.lat],
+                    ]
+                },
+                "legs": [
+                    {"distance": 354000.0, "duration": 14160.0},  # ~220 mi
+                    {"distance": 241400.0, "duration": 9660.0},  # ~150 mi
+                    {"distance": 439600.0, "duration": 17580.0},  # ~273 mi
+                ],
+            }
+        ]
+    }
+    responses.add(responses.GET, FOUR_STOP_URL, json=payload, status=200)
+
+    result = Router().route(
+        "San Bernardino, CA",
+        "Oakland, CA",
+        waypoints=["Bakersfield, CA", "Fresno, CA"],
+    )
+
+    assert result.source == SRC_OSRM
+    assert result.distance_miles == 643.1
+    assert result.duration_hours == 11.5
+    assert result.waypoints == [ORIGIN, BAK, MID, DEST]
+    assert len(result.legs) == 3
+    assert result.legs[0]["origin"] == ORIGIN.address
+    assert result.legs[0]["destination"] == BAK.address
+    assert result.legs[1]["origin"] == BAK.address
+    assert result.legs[1]["destination"] == MID.address
+    assert result.legs[2]["origin"] == MID.address
+    assert result.legs[2]["destination"] == DEST.address
+
+
+@responses.activate
+def test_route_four_stops_geodesic_fallback(monkeypatch):
+    monkeypatch.setattr(Router, "geocode", _four_stop_geocode)
+    responses.add(responses.GET, FOUR_STOP_URL, status=500)
+
+    result = Router().route(
+        "San Bernardino, CA",
+        "Oakland, CA",
+        waypoints=["Bakersfield, CA", "Fresno, CA"],
+    )
+
+    assert result.source == SRC_GEODESIC
+    assert result.waypoints == [ORIGIN, BAK, MID, DEST]
+    assert len(result.legs) == 3
+    assert result.geometry == [
+        [ORIGIN.lat, ORIGIN.lng],
+        [BAK.lat, BAK.lng],
+        [MID.lat, MID.lng],
+        [DEST.lat, DEST.lng],
+    ]
+    assert sum(leg["distance_miles"] for leg in result.legs) == pytest.approx(
+        result.distance_miles
+    )
+
+
+# ---------------------------------------------------------------------- #
+# circular routes (destination returns to origin)
+# ---------------------------------------------------------------------- #
+def _circle_geocode(self, loc):
+    if "Fresno" in loc:
+        return MID
+    return ORIGIN
+
+
+@responses.activate
+def test_route_circular_loop_back_to_origin_osrm(monkeypatch):
+    monkeypatch.setattr(Router, "geocode", _circle_geocode)
+    loop_url = (
+        f"{Config().osrm_base_url}/route/v1/driving/"
+        f"{ORIGIN.lng},{ORIGIN.lat};{MID.lng},{MID.lat};{ORIGIN.lng},{ORIGIN.lat}"
+        f"?overview=full&geometries=geojson"
+    )
+    payload = {
+        "routes": [
+            {
+                "distance": 926000.0,  # ~575 mi round trip
+                "duration": 37040.0,  # 10.3 hours
+                "geometry": {
+                    "coordinates": [
+                        [ORIGIN.lng, ORIGIN.lat],
+                        [MID.lng, MID.lat],
+                        [ORIGIN.lng, ORIGIN.lat],
+                    ]
+                },
+                "legs": [
+                    {"distance": 463000.0, "duration": 18520.0},
+                    {"distance": 463000.0, "duration": 18520.0},
+                ],
+            }
+        ]
+    }
+    responses.add(responses.GET, loop_url, json=payload, status=200)
+
+    result = Router().route("San Bernardino, CA", "San Bernardino, CA", waypoints=["Fresno, CA"])
+
+    assert result.source == SRC_OSRM
+    assert result.origin == ORIGIN
+    assert result.destination == ORIGIN
+    assert result.waypoints == [ORIGIN, MID, ORIGIN]
+    assert len(result.legs) == 2
+    assert result.distance_miles == 575.4
+    assert result.legs[0]["origin"] == ORIGIN.address
+    assert result.legs[1]["destination"] == ORIGIN.address
+
+
+@responses.activate
+def test_route_circular_loop_back_to_origin_geodesic(monkeypatch):
+    monkeypatch.setattr(Router, "geocode", _circle_geocode)
+    loop_url = (
+        f"{Config().osrm_base_url}/route/v1/driving/"
+        f"{ORIGIN.lng},{ORIGIN.lat};{MID.lng},{MID.lat};{ORIGIN.lng},{ORIGIN.lat}"
+        f"?overview=full&geometries=geojson"
+    )
+    responses.add(responses.GET, loop_url, status=500)
+
+    result = Router().route("San Bernardino, CA", "San Bernardino, CA", waypoints=["Fresno, CA"])
+
+    assert result.source == SRC_GEODESIC
+    assert result.waypoints == [ORIGIN, MID, ORIGIN]
+    assert len(result.legs) == 2
+    assert result.geometry == [
+        [ORIGIN.lat, ORIGIN.lng],
+        [MID.lat, MID.lng],
+        [ORIGIN.lat, ORIGIN.lng],
+    ]
+    assert sum(leg["distance_miles"] for leg in result.legs) == pytest.approx(
+        result.distance_miles
+    )
+
+
+@responses.activate
+def test_route_duplicate_waypoint_stop(monkeypatch):
+    monkeypatch.setattr(Router, "geocode", _three_stop_geocode)
+    duplicate_url = (
+        f"{Config().osrm_base_url}/route/v1/driving/"
+        f"{ORIGIN.lng},{ORIGIN.lat};{MID.lng},{MID.lat};{MID.lng},{MID.lat};"
+        f"{DEST.lng},{DEST.lat}?overview=full&geometries=geojson"
+    )
+    responses.add(responses.GET, duplicate_url, status=500)
+
+    result = Router().route(
+        "San Bernardino, CA", "Oakland, CA", waypoints=["Fresno, CA", "Fresno, CA"]
+    )
+
+    assert result.source == SRC_GEODESIC
+    assert result.waypoints == [ORIGIN, MID, MID, DEST]
+    assert len(result.legs) == 3
+    assert result.legs[1]["origin"] == MID.address
+    assert result.legs[1]["destination"] == MID.address
+
+
+# ---------------------------------------------------------------------- #
+# invalid waypoint sequences
+# ---------------------------------------------------------------------- #
+def test_route_multi_stop_first_waypoint_unresolvable(monkeypatch):
+    def flaky(self, loc):
+        if "Bakersfield" in loc:
+            return None
+        if "Fresno" in loc:
+            return MID
+        return ORIGIN
+
+    monkeypatch.setattr(Router, "geocode", flaky)
+    with pytest.raises(ValueError) as excinfo:
+        Router().route(
+            "San Bernardino, CA",
+            "Oakland, CA",
+            waypoints=["Bakersfield, CA", "Fresno, CA"],
+        )
+    assert "Bakersfield, CA" in str(excinfo.value)
+
+
+def test_route_multi_stop_last_waypoint_unresolvable(monkeypatch):
+    def flaky(self, loc):
+        if "Stockton" in loc:
+            return None
+        return ORIGIN
+
+    monkeypatch.setattr(Router, "geocode", flaky)
+    with pytest.raises(ValueError) as excinfo:
+        Router().route(
+            "San Bernardino, CA", "Oakland, CA", waypoints=["Stockton, CA"]
+        )
+    assert "Stockton, CA" in str(excinfo.value)
+
+
+def test_route_multi_stop_multiple_unresolvable_locations(monkeypatch):
+    def flaky(self, loc):
+        if "Fresno" in loc or "Bakersfield" in loc:
+            return None
+        return ORIGIN
+
+    monkeypatch.setattr(Router, "geocode", flaky)
+    with pytest.raises(ValueError) as excinfo:
+        Router().route(
+            "San Bernardino, CA",
+            "Oakland, CA",
+            waypoints=["Bakersfield, CA", "Fresno, CA"],
+        )
+    for missing in ("Bakersfield, CA", "Fresno, CA"):
+        assert missing in str(excinfo.value)
+
+
+@responses.activate
+def test_route_empty_waypoint_list_single_leg(monkeypatch):
+    monkeypatch.setattr(Router, "geocode", _three_stop_geocode)
+    responses.add(responses.GET, OSRM_URL, status=500)
+
+    result = Router().route(
+        "San Bernardino, CA", "Oakland, CA", waypoints=[]
+    )
+
+    assert result.source == SRC_GEODESIC
+    assert result.waypoints == [ORIGIN, DEST]
+    assert len(result.legs) == 1
+
+
+# ---------------------------------------------------------------------- #
 # save_route persistence
 # ---------------------------------------------------------------------- #
 def test_save_route_persists(tmp_path, monkeypatch):

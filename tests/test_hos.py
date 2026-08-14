@@ -8,8 +8,12 @@ from lanesight.core.hos import (
     CYCLE_LIMIT_HOURS,
     DAILY_DRIVE_LIMIT_HOURS,
     DAILY_DUTY_WINDOW_HOURS,
+    SLEEPER_BERTH_FULL_RESET_HOURS,
+    SLEEPER_BERTH_SPLIT_OFF_DUTY_HOURS,
+    SLEEPER_BERTH_SPLIT_MIN_HOURS,
     calculate_required_breaks,
     calculate_route_hos,
+    calculate_sleeper_berth_reset,
 )
 from lanesight.models import Driver
 
@@ -135,3 +139,110 @@ def test_violation_70_hour_cycle_limit():
     assert result["is_legal"] is False
     assert result["required_breaks"] == 0
     assert result["updated_driver_clocks"]["cycle_hours_remaining"] == pytest.approx(-0.5)
+
+
+# ---------------------------------------------------------------------- #
+# 30-minute break trigger edge cases
+# ---------------------------------------------------------------------- #
+@pytest.mark.parametrize(
+    "drive_hours,expected_breaks",
+    [
+        (BREAK_THRESHOLD_HOURS, 1),
+        (BREAK_THRESHOLD_HOURS - 0.001, 0),
+        (BREAK_THRESHOLD_HOURS + 0.001, 1),
+        (BREAK_THRESHOLD_HOURS * 2, 2),
+        (BREAK_THRESHOLD_HOURS * 2 - 0.001, 1),
+        (BREAK_THRESHOLD_HOURS * 2 + 0.001, 2),
+    ],
+)
+def test_break_trigger_boundaries(drive_hours, expected_breaks):
+    assert calculate_required_breaks(drive_hours) == expected_breaks
+
+
+@pytest.mark.parametrize(
+    "drive_hours,expected_elapsed",
+    [
+        (7.9, 7.9),
+        (8.0, 8.5),
+        (8.1, 8.6),
+        (16.0, 17.0),
+        (16.1, 17.1),
+    ],
+)
+def test_total_elapsed_hours_includes_breaks(drive_hours, expected_elapsed):
+    driver = make_driver(drive=DAILY_DRIVE_LIMIT_HOURS + 10, shift=40, cycle=40)
+    result = calculate_route_hos(drive_hours, driver)
+    assert result["total_elapsed_hours"] == pytest.approx(expected_elapsed)
+    assert result["required_breaks"] == calculate_required_breaks(drive_hours)
+
+
+def test_break_trigger_exactly_at_threshold_elapsed():
+    driver = make_driver(drive=11.0, shift=14.0, cycle=70.0)
+    result = calculate_route_hos(BREAK_THRESHOLD_HOURS, driver)
+
+    assert result["required_breaks"] == 1
+    assert result["total_elapsed_hours"] == pytest.approx(8.5)
+    assert result["is_legal"] is True
+    assert result["updated_driver_clocks"]["drive_hours_remaining"] == pytest.approx(3.0)
+    assert result["updated_driver_clocks"]["shift_hours_remaining"] == pytest.approx(5.5)
+
+
+# ---------------------------------------------------------------------- #
+# 10-hour sleeper berth reset
+# ---------------------------------------------------------------------- #
+@pytest.mark.parametrize(
+    "sleeper_hours,off_duty_hours,expected",
+    [
+        (10.0, 0.0, True),
+        (10.5, 0.0, True),
+        (9.0, 1.0, False),
+        (SLEEPER_BERTH_SPLIT_MIN_HOURS, SLEEPER_BERTH_SPLIT_OFF_DUTY_HOURS, True),
+        (7.0, 2.5, True),
+        (7.5, 2.0, True),
+        (6.9, 2.0, False),
+        (7.0, 1.9, False),
+        (6.9, 1.9, False),
+        (0.0, 0.0, False),
+    ],
+)
+def test_sleeper_berth_reset_qualification(sleeper_hours, off_duty_hours, expected):
+    assert (
+        calculate_sleeper_berth_reset(sleeper_hours, off_duty_hours) == expected
+    )
+
+
+def test_full_ten_hour_sleeper_berth_reset_qualifies():
+    assert (
+        calculate_sleeper_berth_reset(
+            SLEEPER_BERTH_FULL_RESET_HOURS, 0.0
+        )
+        is True
+    )
+
+
+def test_sleeper_berth_split_requires_both_segments():
+    assert (
+        calculate_sleeper_berth_reset(
+            SLEEPER_BERTH_SPLIT_MIN_HOURS, 0.0
+        )
+        is False
+    )
+    assert (
+        calculate_sleeper_berth_reset(
+            0.0, SLEEPER_BERTH_SPLIT_OFF_DUTY_HOURS
+        )
+        is False
+    )
+
+
+def test_sleeper_berth_reset_after_full_rest_extends_clocks():
+    exhausted = make_driver(drive=8.0, shift=5.0, cycle=60.0)
+    before = calculate_route_hos(6.0, exhausted)
+    assert before["is_legal"] is False  # 6h drive exceeds remaining 5h shift window
+
+    assert calculate_sleeper_berth_reset(10.0, 0.0) is True
+
+    refreshed = make_driver(drive=11.0, shift=14.0, cycle=60.0)
+    after = calculate_route_hos(6.0, refreshed)
+    assert after["is_legal"] is True
+    assert after["required_breaks"] == 0

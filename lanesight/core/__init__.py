@@ -22,8 +22,12 @@ from lanesight.core.hos import (
     CYCLE_LIMIT_HOURS,
     DAILY_DRIVE_LIMIT_HOURS,
     DAILY_DUTY_WINDOW_HOURS,
+    SLEEPER_BERTH_FULL_RESET_HOURS,
+    SLEEPER_BERTH_SPLIT_MIN_HOURS,
+    SLEEPER_BERTH_SPLIT_OFF_DUTY_HOURS,
     calculate_required_breaks,
     calculate_route_hos,
+    calculate_sleeper_berth_reset,
 )
 from lanesight.core.router import Config, GeoPoint, RouteResult, Router
 
@@ -43,6 +47,10 @@ __all__ = [
     "CYCLE_LIMIT_HOURS",
     "calculate_required_breaks",
     "calculate_route_hos",
+    "calculate_sleeper_berth_reset",
+    "SLEEPER_BERTH_FULL_RESET_HOURS",
+    "SLEEPER_BERTH_SPLIT_MIN_HOURS",
+    "SLEEPER_BERTH_SPLIT_OFF_DUTY_HOURS",
     "DAILY_DRIVE_LIMIT_HOURS",
     "DAILY_DUTY_WINDOW_HOURS",
     "BREAK_DURATION_HOURS",

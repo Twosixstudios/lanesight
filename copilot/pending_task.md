@@ -1,26 +1,21 @@
-/clea# Task ID: 4.2 - FastAPI Headless Wrapper
+# Task ID: 4.3 - Test Suite Expansion
 
 ## Objective
-1. Implement a FastAPI application to expose `/api/v1/route` and `/api/v1/geocode` endpoints.
-2. Utilize the `lanesight.core` package (Task 4.1) to handle business logic.
-3. Ensure the API is documented via Swagger/OpenAPI (default FastAPI behavior).
+1. Expand the `pytest` suite to provide comprehensive coverage for multi-stop routing logic and HOS calculation edge cases.
+2. Ensure all new tests are integrated into the existing CI/CD pipeline.
 
 ## Target Files
-- `lanesight/api/main.py` (new: FastAPI application entry point)
-- `lanesight/api/schemas.py` (new: Pydantic models for request/response validation)
-- `Tasks.md` (mark Task 4.2 as [x] once verified)
+- `tests/test_routing.py` (or relevant test file)
+- `tests/test_hos.py` (or relevant test file)
+- `lanesight/Tasks.md`
 
 ## Step-by-Step Requirements
-1. Create `lanesight/api/schemas.py` defining request models for `RouteRequest` (origins, destinations, vehicle specs) and `GeocodeRequest`.
-2. Create `lanesight/api/main.py`:
-   - Initialize `FastAPI` instance.
-   - Implement `POST /api/v1/route` that calls `lanesight.core.router.Router`.
-   - Implement `POST /api/v1/geocode` that calls `lanesight.core.router.geocoder`.
-3. Add a simple test in `tests/test_api.py` using `fastapi.testclient.TestClient` to verify endpoint responses.
-4. Update `Tasks.md` to mark Task 4.2 as `[x]`.
+1. Develop unit and integration tests for `lanesight.core.router.route()` specifically targeting multi-stop waypoints (e.g., 3+ stops, circular routes, and invalid waypoint sequences).
+2. Develop tests for `lanesight.core.hos` to verify 30-minute break triggers and 10-hour sleeper berth reset logic under various driving hour scenarios.
+3. Ensure all tests use `pytest` and mock external dependencies where necessary to maintain speed and reliability.
+4. Update `lanesight/Tasks.md` to mark Task 4.3 as `[x]` and update the overall progress to 15/15.
 
 ## Guardrails & Verification
-- Ensure the API handles errors gracefully (e.g., invalid coordinates) and returns appropriate HTTP status codes.
-- Do not expose database internals directly; use Pydantic schemas for all I/O.
-- Run `pytest tests/test_api.py` to verify the new endpoints.
-- Run `git add . && git commit -m "feat(api): complete Task 4.2 - FastAPI Headless Wrapper" && git push origin main` upon successful verification.
+- All tests must pass with `python -m pytest`.
+- Maintain 100% pass rate for existing tests.
+- Run `git add . && git commit -m "feat(test): complete Task 4.3 - Test Suite Expansion" && git push origin main` upon successful verification.

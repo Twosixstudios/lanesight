@@ -16,12 +16,35 @@ BREAK_DURATION_HOURS = 0.5
 CYCLE_LIMIT_HOURS = 70.0
 CYCLE_DAYS = 8
 
+# Sleeper berth provision (49 CFR 395.1(g))
+SLEEPER_BERTH_FULL_RESET_HOURS = 10.0
+SLEEPER_BERTH_SPLIT_MIN_HOURS = 7.0
+SLEEPER_BERTH_SPLIT_OFF_DUTY_HOURS = 2.0
+
 
 def calculate_required_breaks(drive_hours: float) -> int:
     """Number of mandatory 30-minute rest breaks for a given driving time."""
     if drive_hours <= 0:
         return 0
     return int(drive_hours // BREAK_THRESHOLD_HOURS)
+
+
+def calculate_sleeper_berth_reset(
+    sleeper_berth_hours: float, off_duty_hours: float
+) -> bool:
+    """Whether the driver qualifies for a 10-hour sleeper berth reset.
+
+    A full reset requires at least 10 consecutive hours in the sleeper
+    berth. Alternatively, a split is valid when the sleeper berth segment
+    runs at least 7 hours and the paired off-duty segment at least 2 hours
+    (49 CFR 395.1(g) split-sleeper provision).
+    """
+    if sleeper_berth_hours >= SLEEPER_BERTH_FULL_RESET_HOURS:
+        return True
+    return (
+        sleeper_berth_hours >= SLEEPER_BERTH_SPLIT_MIN_HOURS
+        and off_duty_hours >= SLEEPER_BERTH_SPLIT_OFF_DUTY_HOURS
+    )
 
 
 def calculate_route_hos(route_duration_hours: float, driver: Driver) -> dict:

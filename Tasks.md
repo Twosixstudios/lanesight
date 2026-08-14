@@ -18,7 +18,7 @@ kanban-plugin: list
 
 - [ ] **Active Phase**: Phase 3 - Interactive UI & Dispatch Dashboard
 - [ ] **Target Deliverable**: Interactive Streamlit UI featuring multi-stop route visualizer, HOS duty clock status, route financial cost breakdown, and persistent dispatch log views.
-- [x] **Overall Progress**: 14 / 15 Tasks Completed (93.3%)
+- [x] **Overall Progress**: 15 / 15 Tasks Completed (100%)
 
 
 ## 📌 Phase 1: Core Engine & Foundation
@@ -74,7 +74,7 @@ kanban-plugin: list
 - [x] **Task 4.2: FastAPI Headless Wrapper** #priority/high
 	- **Description**: Expose `/api/v1/route` and `/api/v1/geocode` REST endpoints for external apps.
 	- **Prerequisites**: Task 4.1
-- [ ] **Task 4.3: Test Suite Expansion** #priority/medium
+- [x] **Task 4.3: Test Suite Expansion** #priority/medium
 	- **Description**: Expand pytest suite for multi-stop routing and HOS calculation logic.
 	- **Prerequisites**: Task 4.1
 
