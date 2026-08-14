@@ -1,7 +1,5 @@
 ---
-
-kanban-plugin: board
-
+kanban-plugin: list
 ---
 
 ## kanban-plugin: board
@@ -10,7 +8,7 @@ kanban-plugin: board
 
 ## 🚚 LaneSight - Architecture & Rules
 
-- [ ] **Agent Instructions & Guidelines**
+- [x] **Agent Instructions & Guidelines**
 	- Always check this file before starting work on a task.
 	- Only work on tasks marked as `[ ]` under the **Active Phase**.
 	- Once a task is completed and verified, update its status to `[x]` and commit `Tasks.md` alongside code changes.
@@ -20,7 +18,7 @@ kanban-plugin: board
 
 - [ ] **Active Phase**: Phase 3 - Interactive UI & Dispatch Dashboard
 - [ ] **Target Deliverable**: Interactive Streamlit UI featuring multi-stop route visualizer, HOS duty clock status, route financial cost breakdown, and persistent dispatch log views.
-- [x] **Overall Progress**: 11 / 15 Tasks Completed (73.3%)
+- [x] **Overall Progress**: 12 / 15 Tasks Completed (80.0%)
 
 
 ## 📌 Phase 1: Core Engine & Foundation
@@ -63,7 +61,7 @@ kanban-plugin: board
 - [x] **Task 3.2: HOS & Driver Duty Status Dashboard** #priority/medium
 	- **Description**: Integrate `lanesight.core.hos` into the Streamlit dashboard with driver clock presets/custom inputs, HOS compliance status badges, mandatory rest break metrics, total elapsed trip time, and post-trip remaining-clock progress bars. Verified via Streamlit `AppTest` UI tests.
 	- **Prerequisites**: Task 3.1
-- [ ] **Task 3.3: Cost Efficiency Analytics** #priority/low
+- [x] **Task 3.3: Cost Efficiency Analytics** #priority/low
 	- **Description**: Display cost-per-mile and efficiency metrics directly in the Streamlit dashboard.
 	- **Prerequisites**: Task 3.1
 
@@ -95,6 +93,6 @@ kanban-plugin: board
 
 %% kanban:settings
 ```
-{"kanban-plugin":"board","show-checkboxes":true,"full-list-lane-width":true,"show-relative-date":true,"link-date-to-daily-note":true}
+{"kanban-plugin":"list","show-checkboxes":true,"full-list-lane-width":true,"show-relative-date":true,"link-date-to-daily-note":true}
 ```
 %%

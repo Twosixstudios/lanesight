@@ -4,6 +4,12 @@ import folium
 import streamlit as st
 from streamlit_folium import st_folium
 
+from lanesight.core.costs import (
+    DEFAULT_ESTIMATED_TOLLS,
+    DEFAULT_FUEL_PRICE_PER_GALLON,
+    DEFAULT_OPERATING_COST_PER_MILE,
+    calculate_route_costs,
+)
 from lanesight.core.hos import (
     BREAK_DURATION_HOURS,
     CYCLE_LIMIT_HOURS,
@@ -161,6 +167,25 @@ with st.sidebar:
     )
 
     st.markdown("---")
+    st.subheader("Cost Assumptions")
+
+    st.session_state.setdefault("cost_mpg", 6.5)
+    st.session_state.setdefault("cost_fuel_price", DEFAULT_FUEL_PRICE_PER_GALLON)
+    st.session_state.setdefault("cost_operating_cost", DEFAULT_OPERATING_COST_PER_MILE)
+    st.session_state.setdefault("cost_tolls", DEFAULT_ESTIMATED_TOLLS)
+
+    avg_mpg = st.number_input("Avg MPG", min_value=1.0, step=0.5, key="cost_mpg")
+    fuel_price = st.number_input(
+        "Fuel Price ($/gal)", step=0.05, key="cost_fuel_price"
+    )
+    operating_cost = st.number_input(
+        "Operating Cost ($/mi)", step=0.05, key="cost_operating_cost"
+    )
+    estimated_tolls = st.number_input(
+        "Estimated Tolls ($)", min_value=0.0, step=5.0, key="cost_tolls"
+    )
+
+    st.markdown("---")
     calculate_btn = st.button("Calculate Route", type="primary", width="stretch")
 # ------------------------------------------------------------------ #
 # Route computation (wired directly into lanesight.core.router.route)
@@ -266,6 +291,39 @@ else:
         min(max(cycle_after, 0.0) / CYCLE_LIMIT_HOURS, 1.0),
         text=f"{cycle_remaining:,.1f}h → {cycle_after:,.1f}h post-trip",
     )
+
+    st.markdown("---")
+
+    st.subheader("Cost Efficiency")
+    cost_breakdown = calculate_route_costs(
+        result.distance_miles,
+        avg_mpg,
+        fuel_price,
+        operating_cost,
+        estimated_tolls,
+    )
+    cost_per_mile = (
+        cost_breakdown.total_cost / result.distance_miles
+        if result.distance_miles > 0
+        else 0.0
+    )
+    delta_per_mile = cost_per_mile - DEFAULT_OPERATING_COST_PER_MILE
+
+    e1, e2, e3 = st.columns(3)
+    e1.metric(
+        "Cost per Mile",
+        f"${cost_per_mile:,.2f}",
+        delta=f"{delta_per_mile:+,.2f}",
+        delta_color="inverse",
+        help="Total trip cost divided by route miles, relative to the per-mile operating baseline.",
+    )
+    e2.metric("Total Cost", f"${cost_breakdown.total_cost:,.2f}")
+    e3.metric("Fuel Gallons", f"{cost_breakdown.fuel_gallons:,.1f}")
+
+    e4, e5, e6 = st.columns(3)
+    e4.metric("Fuel Cost", f"${cost_breakdown.fuel_cost:,.2f}")
+    e5.metric("Driver Cost", f"${cost_breakdown.driver_cost:,.2f}")
+    e6.metric("Tolls", f"${cost_breakdown.estimated_tolls:,.2f}")
 
     st.markdown("---")
 
