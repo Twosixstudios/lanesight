@@ -18,7 +18,7 @@ kanban-plugin: list
 
 - [x] **Active Phase**: Phase 5 - Fleet Scout Live Integration
 - [ ] **Target Deliverable**: Interactive Streamlit UI featuring multi-stop route visualizer, HOS duty clock status, route financial cost breakdown, and persistent dispatch log views.
-- [x] **Overall Progress**: 16 / 17 Tasks Completed (94.1%)
+- [x] **Overall Progress**: 17 / 17 Tasks Completed (100%)
 
 
 ## 📌 Phase 1: Core Engine & Foundation
@@ -84,8 +84,8 @@ kanban-plugin: list
 - [x] **Task 5.1: Live Telemetry & GPS Matching** #priority/high
 	- **Description**: Recalculate remaining distance and ETA in real time using active GPS coordinates.
 	- **Prerequisites**: Task 4.2
-- [ ] **Task 5.2: Route Deviation Alerts** #priority/medium
-	- **Description**: Detect when a vehicle strays from the calculated OSRM route polyline.
+- [x] **Task 5.2: Route Deviation Alerts** #priority/medium
+	- **Description**: Detect when a vehicle strays from the calculated OSRM route polyline. Phase 5 is now complete (17/17 tasks).
 	- **Prerequisites**: Task 5.1
 
 

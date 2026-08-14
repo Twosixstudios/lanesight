@@ -29,6 +29,12 @@ from lanesight.core.hos import (
     calculate_route_hos,
     calculate_sleeper_berth_reset,
 )
+from lanesight.core.alerts import (
+    ALERT_TYPE_ROUTE_DEVIATION,
+    DEVIATION_ALERT_THRESHOLD,
+    Alert,
+    DeviationMonitor,
+)
 from lanesight.core.router import Config, GeoPoint, RouteResult, Router
 from lanesight.core.telemetry import (
     GPS_DRIFT_TOLERANCE_METERS,
@@ -48,6 +54,10 @@ __all__ = [
     "TelemetryPoint",
     "TelemetrySession",
     "match_to_route",
+    "ALERT_TYPE_ROUTE_DEVIATION",
+    "DEVIATION_ALERT_THRESHOLD",
+    "Alert",
+    "DeviationMonitor",
     "CostBreakdown",
     "calculate_route_costs",
     "calculate_route_costs_for_vehicle",

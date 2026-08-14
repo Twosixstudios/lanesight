@@ -1,21 +1,20 @@
-# Task ID: 5.1 - Live Telemetry & GPS Matching
+# Task ID: 5.2 - Route Deviation Alerts
 
 ## Objective
-1. Implement a telemetry ingestion module to process live GPS coordinates.
-2. Develop a matching algorithm to compare current vehicle location against the active OSRM route polyline to calculate remaining distance and ETA.
+Implement a monitoring service that triggers alerts when a vehicle's telemetry data indicates it has deviated beyond the `GPS_DRIFT_TOLERANCE_METERS` (50m) from the active route polyline.
 
 ## Target Files
-- `lanesight/core/telemetry.py` (New)
-- `lanesight/core/router.py`
+- `lanesight/core/telemetry.py`
+- `lanesight/core/alerts.py` (New)
 - `lanesight/Tasks.md`
 
 ## Step-by-Step Requirements
-1. Create `lanesight/core/telemetry.py` to handle incoming GPS data points (lat, lon, timestamp).
-2. Implement a function `match_to_route(current_coords, route_polyline)` that identifies the nearest point on the route and calculates the remaining distance to the destination.
-3. Update `lanesight/core/router.py` to expose an `update_eta(remaining_distance, average_speed)` method.
-4. Update `lanesight/Tasks.md` to mark Task 5.1 as `[x]` and update the Active Phase to Phase 5.
+1. Create `lanesight/core/alerts.py` to define an `Alert` dataclass and a `DeviationMonitor` class.
+2. Integrate `DeviationMonitor` with the existing `TelemetrySession` to track consecutive "off-route" samples.
+3. Implement a threshold-based alert trigger (e.g., if a vehicle is off-route for > 3 consecutive samples, flag a `ROUTE_DEVIATION` alert).
+4. Update `lanesight/Tasks.md` to mark Task 5.2 as `[x]` and confirm Phase 5 completion.
 
 ## Guardrails & Verification
-- Ensure the matching algorithm handles GPS drift (e.g., tolerance threshold of 50 meters).
-- All new logic must be covered by unit tests in `tests/test_telemetry.py`.
-- Run `git add . && git commit -m "feat(telemetry): complete Task 5.1 - Live Telemetry & GPS Matching" && git push origin main` upon successful verification.
+- Ensure alerts are only triggered for significant, sustained deviations to avoid noise from minor GPS jitter.
+- Add unit tests in `tests/test_alerts.py` to simulate on-route and off-route telemetry streams.
+- Run `git add . && git commit -m "feat(alerts): complete Task 5.2 - Route Deviation Alerts" && git push origin main` upon successful verification.

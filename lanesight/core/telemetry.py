@@ -17,6 +17,8 @@ from typing import Optional, Sequence
 
 from geopy.distance import geodesic
 
+from lanesight.core.alerts import DeviationMonitor
+
 logger = logging.getLogger("lanesight")
 
 # GPS drift tolerance (meters). Samples within this distance of the route
@@ -140,11 +142,21 @@ def match_to_route(
 
 
 class TelemetrySession:
-    """Accumulates live GPS samples and reports route progress per sample."""
+    """Accumulates live GPS samples and reports route progress per sample.
 
-    def __init__(self, route_polyline: Sequence[Sequence[float]]):
+    Optionally wires a :class:`~lanesight.core.alerts.DeviationMonitor` to
+    the stream so sustained off-route deviations raise ``ROUTE_DEVIATION``
+    alerts automatically.
+    """
+
+    def __init__(
+        self,
+        route_polyline: Sequence[Sequence[float]],
+        monitor: Optional["DeviationMonitor"] = None,
+    ):
         self.route_polyline = route_polyline
         self.points: list[TelemetryPoint] = []
+        self.monitor = monitor
 
     def ingest(
         self,
@@ -154,13 +166,23 @@ class TelemetrySession:
     ) -> MatchResult:
         """Record a GPS sample and return its route match.
 
-        Defaults the timestamp to the current UTC time when omitted.
+        Defaults the timestamp to the current UTC time when omitted. When a
+        :class:`DeviationMonitor` is attached, the sample is fed to it and
+        any fired alert is appended to ``monitor.alerts``.
         """
         if timestamp is None:
             timestamp = datetime.now(timezone.utc)
         point = TelemetryPoint(lat=lat, lon=lon, timestamp=timestamp)
         self.points.append(point)
-        return match_to_route((lat, lon), self.route_polyline)
+        result = match_to_route((lat, lon), self.route_polyline)
+        if self.monitor is not None:
+            self.monitor.update(
+                on_route=result.on_route,
+                distance_off_route_meters=result.distance_off_route_meters,
+                timestamp=timestamp,
+                matched_coords=result.matched_coords,
+            )
+        return result
 
     @property
     def latest(self) -> Optional[TelemetryPoint]:
