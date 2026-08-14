@@ -18,7 +18,7 @@ kanban-plugin: list
 
 - [ ] **Active Phase**: Phase 3 - Interactive UI & Dispatch Dashboard
 - [ ] **Target Deliverable**: Interactive Streamlit UI featuring multi-stop route visualizer, HOS duty clock status, route financial cost breakdown, and persistent dispatch log views.
-- [x] **Overall Progress**: 12 / 15 Tasks Completed (80.0%)
+- [x] **Overall Progress**: 13 / 15 Tasks Completed (86.7%)
 
 
 ## 📌 Phase 1: Core Engine & Foundation
@@ -68,7 +68,7 @@ kanban-plugin: list
 
 ## 🔌 Phase 4: SDK & REST Microservice
 
-- [ ] **Task 4.1: Core SDK Packaging** #priority/high
+- [x] **Task 4.1: Core SDK Packaging** #priority/high
 	- **Description**: Configure `pyproject.toml` to build `lanesight.core` as a standalone pip package.
 	- **Prerequisites**: Task 2.1
 - [ ] **Task 4.2: FastAPI Headless Wrapper** #priority/high

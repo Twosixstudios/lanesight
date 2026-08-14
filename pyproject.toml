@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lanesight"
+version = "0.1.0"
+description = "LaneSight: freight route visualizer & transit time engine."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "geopy>=2.4.1",
+    "streamlit>=1.37.1",
+    "folium>=0.17.0",
+    "sqlalchemy>=2.0.0",
+    "sqlmodel>=0.0.39",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.2",
+    "responses>=0.25.3",
+    "streamlit-folium>=0.23.1",
+]
+
+[tool.setuptools.packages.find]
+include = ["lanesight*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
