@@ -3,6 +3,8 @@ __pycache__/
 *.pyc
 .DS_Store
 .env
+*.egg-info/
+build_output.tmp
 
 
 
